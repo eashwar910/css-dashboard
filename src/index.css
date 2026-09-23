@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 99%;
+    --foreground: 200 30% 18%;
+    --card: 0 0% 100%;
+    --card-foreground: 200 30% 18%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 200 30% 18%;
+    --primary: 174 63% 53%;
+    --primary-foreground: 200 30% 12%;
+    --secondary: 192 38% 36%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 192 20% 94%;
+    --muted-foreground: 195 20% 35%;
+    --accent: 174 63% 53%;
+    --accent-foreground: 200 30% 12%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 192 38% 78%;
+    --input: 192 38% 82%;
+    --ring: 174 63% 53%;
+    --chart-1: 174 63% 53%;
+    --chart-2: 192 38% 36%;
+    --chart-3: 200 30% 18%;
+    --chart-4: 170 50% 45%;
+    --chart-5: 180 40% 55%;
+    --radius: 0.625rem;
+  }
+
+  .dark {
+    --background: 200 30% 18%;
+    --foreground: 0 0% 92%;
+    --card: 192 30% 27%;
+    --card-foreground: 0 0% 92%;
+    --popover: 192 30% 27%;
+    --popover-foreground: 0 0% 92%;
+    --primary: 174 63% 53%;
+    --primary-foreground: 200 30% 12%;
+    --secondary: 192 30% 27%;
+    --secondary-foreground: 0 0% 92%;
+    --muted: 200 25% 23%;
+    --muted-foreground: 180 15% 65%;
+    --accent: 174 63% 53%;
+    --accent-foreground: 200 30% 12%;
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 192 25% 35%;
+    --input: 192 25% 35%;
+    --ring: 174 63% 53%;
+    --chart-1: 174 63% 53%;
+    --chart-2: 192 38% 50%;
+    --chart-3: 200 30% 60%;
+    --chart-4: 170 50% 55%;
+    --chart-5: 180 40% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+  .calendar-event-day {
+    position: relative;
+  }
+  .calendar-event-day::after {
+    content: '';
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 5px;
+    height: 5px;
+    border-radius: 9999px;
+    @apply bg-primary;
+  }
+}
