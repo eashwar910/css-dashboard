@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { format, parseISO, isSameDay, isSameMonth, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, subMonths } from 'date-fns';
+import {
+  format, parseISO, isSameDay, isSameMonth,
+  startOfMonth, endOfMonth, startOfWeek, endOfWeek,
+  eachDayOfInterval, addMonths, subMonths,
+} from 'date-fns';
 import { cn } from '@/lib/utils';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -24,7 +26,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Plus,
@@ -70,177 +71,219 @@ export function CalendarView() {
   const handleNextMonth = () => setCurrentDate((d) => addMonths(d, 1));
   const handleToday = () => setCurrentDate(new Date(2026, 8, 1));
 
-  const handleDayClick = (day: Date) => {
-    setSelectedDate(day);
-  };
+  const eventsForSelected = selectedDate ? eventsForDay(selectedDate) : [];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            Calendar & Events
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            View and manage all society events and schedules.
-          </p>
+    <div className="space-y-14">
+
+      {/* ── Page header ──────────────────────────────────────────────── */}
+      <header className="border-b border-border pb-6">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <h1 className="font-serif text-3xl font-semibold leading-tight sm:text-4xl">
+              Calendar &amp; Events
+            </h1>
+            <p className="mt-2 max-w-prose text-sm text-muted-foreground">
+              View and manage all society events and schedules.
+            </p>
+          </div>
+          {/* Plain bordered button — no fill, no rounded */}
+          <button
+            onClick={() => setDialogOpen(true)}
+            className="flex items-center gap-2 border border-border px-4 py-2 text-sm text-foreground transition-colors hover:border-primary hover:text-primary"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add event
+          </button>
         </div>
-        <Button onClick={() => setDialogOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Create Event
-        </Button>
-      </div>
+      </header>
 
-      <div className="grid gap-6 lg:grid-cols-5">
-        {/* Calendar Grid */}
-        <Card className="lg:col-span-3 border-border">
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-xl">
-                {format(currentDate, 'MMMM yyyy')}
-              </CardTitle>
-              <div className="flex items-center gap-1">
-                <Button variant="outline" size="icon" onClick={handlePrevMonth} aria-label="Previous month">
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleToday}>
-                  Today
-                </Button>
-                <Button variant="outline" size="icon" onClick={handleNextMonth} aria-label="Next month">
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+      {/* ── Grid: calendar + event list ──────────────────────────────── */}
+      <div className="grid gap-12 lg:grid-cols-5">
+
+        {/* ── Monthly calendar — typeset grid ──────────────────────── */}
+        <div className="lg:col-span-3">
+          {/* Month navigation */}
+          <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
+            <h2 className="font-serif text-xl font-semibold">
+              {format(currentDate, 'MMMM yyyy')}
+            </h2>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handlePrevMonth}
+                aria-label="Previous month"
+                className="flex h-7 w-7 items-center justify-center border border-border text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={handleToday}
+                className="border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Today
+              </button>
+              <button
+                onClick={handleNextMonth}
+                aria-label="Next month"
+                className="flex h-7 w-7 items-center justify-center border border-border text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Day-of-week headers */}
+          <div className="grid grid-cols-7 border-b border-border">
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+              <div
+                key={d}
+                className="py-1.5 text-center text-[11px] font-medium text-muted-foreground"
+              >
+                {d}
               </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {/* Day headers */}
-            <div className="mb-2 grid grid-cols-7 gap-1">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                <div
-                  key={d}
-                  className="py-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground"
-                >
-                  {d}
-                </div>
-              ))}
-            </div>
-            {/* Calendar days */}
-            <div className="grid grid-cols-7 gap-1">
-              {days.map((day) => {
-                const dayEvents = eventsForDay(day);
-                const inMonth = isSameMonth(day, currentDate);
-                const isToday = isSameDay(day, new Date());
-                const isSelected =
-                  selectedDate && isSameDay(day, selectedDate);
+            ))}
+          </div>
 
-                return (
-                  <button
-                    key={day.toISOString()}
-                    onClick={() => handleDayClick(day)}
+          {/* Calendar day cells — hairline grid, no rounded, no shadows */}
+          <div className="grid grid-cols-7 border-l border-border">
+            {days.map((day) => {
+              const dayEvents = eventsForDay(day);
+              const inMonth = isSameMonth(day, currentDate);
+              const isToday = isSameDay(day, new Date());
+              const isSelected = selectedDate && isSameDay(day, selectedDate);
+
+              return (
+                <button
+                  key={day.toISOString()}
+                  onClick={() => setSelectedDate(isSelected ? null : day)}
+                  className={cn(
+                    'relative flex min-h-[72px] flex-col border-b border-r border-border p-1.5 text-left transition-colors sm:min-h-[88px]',
+                    inMonth ? 'bg-background' : 'bg-muted/20',
+                    !inMonth && 'text-muted-foreground',
+                    isSelected && 'bg-primary/5',
+                  )}
+                >
+                  {/* Day number */}
+                  <span
                     className={cn(
-                      'relative flex min-h-[64px] flex-col items-center rounded-lg border p-1.5 text-sm transition-all sm:min-h-[80px]',
-                      inMonth
-                        ? 'border-border bg-card hover:border-primary'
-                        : 'border-transparent bg-muted/30 text-muted-foreground',
-                      isSelected && 'border-primary ring-1 ring-primary',
-                      isToday && 'border-primary'
+                      'inline-block text-xs font-medium leading-none',
+                      isToday && 'font-bold text-primary underline underline-offset-2',
+                      isSelected && !isToday && 'text-primary'
                     )}
                   >
-                    <span
-                      className={cn(
-                        'flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium',
-                        isToday && 'bg-primary text-primary-foreground'
+                    {format(day, 'd')}
+                  </span>
+
+                  {/* Event chips — flat text, no rounded pill */}
+                  {dayEvents.length > 0 && (
+                    <div className="mt-1 hidden flex-col gap-px overflow-hidden sm:flex">
+                      {dayEvents.slice(0, 2).map((e) => (
+                        <div
+                          key={e.id}
+                          className="truncate bg-primary/10 px-1 py-px text-[0.6rem] leading-tight text-primary"
+                        >
+                          {e.title}
+                        </div>
+                      ))}
+                      {dayEvents.length > 2 && (
+                        <span className="px-1 text-[0.6rem] text-muted-foreground">
+                          +{dayEvents.length - 2} more
+                        </span>
                       )}
-                    >
-                      {format(day, 'd')}
-                    </span>
-                    {dayEvents.length > 0 && (
-                      <div className="mt-1 hidden flex-1 flex-col gap-0.5 overflow-hidden sm:flex">
-                        {dayEvents.slice(0, 2).map((e) => (
-                          <div
-                            key={e.id}
-                            className="truncate rounded bg-primary/15 px-1 py-0.5 text-[0.65rem] text-primary"
-                          >
-                            {e.title}
-                          </div>
-                        ))}
-                        {dayEvents.length > 2 && (
-                          <span className="px-1 text-[0.65rem] text-muted-foreground">
-                            +{dayEvents.length - 2} more
-                          </span>
+                    </div>
+                  )}
+                  {/* Mobile dot */}
+                  {dayEvents.length > 0 && (
+                    <span className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 bg-primary sm:hidden" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Selected-day detail — appears below calendar, no card */}
+          {selectedDate && (
+            <div className="border-t border-border mt-0 pt-4">
+              <p className="mb-3 text-xs text-muted-foreground">
+                {format(selectedDate, 'EEEE, MMMM d, yyyy')}
+              </p>
+              {eventsForSelected.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No events on this day.</p>
+              ) : (
+                <div className="divide-y divide-border">
+                  {eventsForSelected.map((e) => {
+                    const s = parseISO(e.start);
+                    return (
+                      <div key={e.id} className="py-3">
+                        <p className="text-sm font-medium">{e.title}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {format(s, 'h:mm a')} – {format(parseISO(e.end), 'h:mm a')}
+                          {e.location && ` · ${e.location}`}
+                        </p>
+                        {e.description && (
+                          <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                            {e.description}
+                          </p>
                         )}
                       </div>
-                    )}
-                    {dayEvents.length > 0 && (
-                      <span className="absolute bottom-1 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-primary sm:hidden" />
-                    )}
-                  </button>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </CardContent>
-        </Card>
+          )}
+        </div>
 
-        {/* Event Flow List */}
-        <Card className="lg:col-span-2 border-border">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <CalendarDays className="h-5 w-5 text-primary" />
-              Event Flow
-            </CardTitle>
-            <CardDescription>
-              {eventsThisMonth.length} events in {format(currentDate, 'MMMM')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[520px] pr-4">
-              <ol className="relative space-y-1">
-                {sortedEvents.length === 0 && (
-                  <p className="py-8 text-center text-sm text-muted-foreground">
-                    No events this month.
-                  </p>
-                )}
-                {sortedEvents.map((event, idx) => {
+        {/* ── Event list (chronological) ───────────────────────────── */}
+        <div className="lg:col-span-2">
+          <div className="mb-4 flex items-baseline justify-between border-b border-border pb-2">
+            <h2 className="font-serif text-lg font-semibold">Event Schedule</h2>
+            <span className="text-xs text-muted-foreground">
+              {eventsThisMonth.length} in {format(currentDate, 'MMMM')}
+            </span>
+          </div>
+
+          <ScrollArea className="h-[560px] scrollbar-thin">
+            {sortedEvents.length === 0 ? (
+              <p className="py-8 text-sm text-muted-foreground">No events this month.</p>
+            ) : (
+              <div className="divide-y divide-border">
+                {sortedEvents.map((event) => {
                   const start = parseISO(event.start);
                   const end = parseISO(event.end);
                   return (
-                    <li key={event.id} className="relative flex gap-4 pb-4">
-                      {/* Timeline line */}
-                      {idx < sortedEvents.length - 1 && (
-                        <span className="absolute left-[15px] top-8 h-full w-px bg-border" />
-                      )}
-                      {/* Timeline dot */}
-                      <span className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-primary bg-card">
-                        <span className="h-2 w-2 rounded-full bg-primary" />
-                      </span>
-                      {/* Event card */}
-                      <div className="flex-1 rounded-lg border border-border bg-card p-3 transition-colors hover:border-primary">
-                        <p className="text-sm font-semibold">{event.title}</p>
-                        <div className="mt-1.5 flex flex-col gap-1 text-xs text-muted-foreground">
+                    <article key={event.id} className="py-4 pr-2">
+                      {/* Date as section header */}
+                      <p className="mb-1 text-xs text-muted-foreground">
+                        {format(start, 'EEE, MMM d')}
+                      </p>
+                      <p className="font-serif text-base font-semibold leading-snug">
+                        {event.title}
+                      </p>
+                      <div className="mt-1.5 space-y-1 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1.5">
+                          <Clock className="h-3 w-3 shrink-0" />
+                          {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
+                        </span>
+                        {event.location && (
                           <span className="flex items-center gap-1.5">
-                            <Clock className="h-3 w-3" />
-                            {format(start, 'EEE, MMM d')} ·{' '}
-                            {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            {event.location}
                           </span>
-                          {event.location && (
-                            <span className="flex items-center gap-1.5">
-                              <MapPin className="h-3 w-3" />
-                              {event.location}
-                            </span>
-                          )}
-                        </div>
+                        )}
+                      </div>
+                      {event.description && (
                         <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
                           {event.description}
                         </p>
-                      </div>
-                    </li>
+                      )}
+                    </article>
                   );
                 })}
-              </ol>
-            </ScrollArea>
-          </CardContent>
-        </Card>
+              </div>
+            )}
+          </ScrollArea>
+        </div>
       </div>
 
       <CreateEventDialog
@@ -285,7 +328,6 @@ function CreateEventDialog({
       location: location || undefined,
     });
 
-    // Reset form
     setName('');
     setStartDate('');
     setStartTime('');
@@ -300,17 +342,17 @@ function CreateEventDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <CalendarPlus className="h-5 w-5 text-primary" />
-            Create New Event
+          <DialogTitle className="font-serif text-xl font-semibold flex items-center gap-2">
+            <CalendarPlus className="h-4 w-4 text-primary" />
+            New Event
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs text-muted-foreground">
             Add a new event to the society calendar.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="event-name">Event Name</Label>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="event-name" className="text-xs">Event Name</Label>
             <Input
               id="event-name"
               value={name}
@@ -321,8 +363,8 @@ function CreateEventDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="start-date">Start Date</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="start-date" className="text-xs">Start Date</Label>
               <Input
                 id="start-date"
                 type="date"
@@ -331,8 +373,8 @@ function CreateEventDialog({
                 required
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="start-time">Start Time</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="start-time" className="text-xs">Start Time</Label>
               <Select value={startTime} onValueChange={setStartTime}>
                 <SelectTrigger id="start-time">
                   <SelectValue placeholder="Select time" />
@@ -349,8 +391,8 @@ function CreateEventDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="end-date">End Date</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="end-date" className="text-xs">End Date</Label>
               <Input
                 id="end-date"
                 type="date"
@@ -358,8 +400,8 @@ function CreateEventDialog({
                 onChange={(e) => setEndDate(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="end-time">End Time</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="end-time" className="text-xs">End Time</Label>
               <Select value={endTime} onValueChange={setEndTime}>
                 <SelectTrigger id="end-time">
                   <SelectValue placeholder="Select time" />
@@ -375,8 +417,8 @@ function CreateEventDialog({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="event-location">Location (optional)</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="event-location" className="text-xs">Location (optional)</Label>
             <Input
               id="event-location"
               value={location}
@@ -385,26 +427,29 @@ function CreateEventDialog({
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="event-description">Description / Flow</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="event-description" className="text-xs">Description</Label>
             <Textarea
               id="event-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe the event agenda and details..."
-              rows={4}
+              rows={3}
             />
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="pt-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
+              className="text-sm"
             >
               Cancel
             </Button>
-            <Button type="submit">Create Event</Button>
+            <Button type="submit" className="text-sm">
+              Create Event
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

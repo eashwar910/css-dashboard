@@ -1,61 +1,101 @@
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..900;1,8..60,300..900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  /* ── Editorial Light ─────────────────────────────────────────────── */
   :root {
-    --background: 0 0% 99%;
-    --foreground: 200 30% 18%;
-    --card: 0 0% 100%;
-    --card-foreground: 200 30% 18%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 200 30% 18%;
-    --primary: 174 63% 53%;
-    --primary-foreground: 200 30% 12%;
-    --secondary: 192 38% 36%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 192 20% 94%;
-    --muted-foreground: 195 20% 35%;
-    --accent: 174 63% 53%;
-    --accent-foreground: 200 30% 12%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 192 38% 78%;
-    --input: 192 38% 82%;
-    --ring: 174 63% 53%;
-    --chart-1: 174 63% 53%;
-    --chart-2: 192 38% 36%;
-    --chart-3: 200 30% 18%;
-    --chart-4: 170 50% 45%;
-    --chart-5: 180 40% 55%;
-    --radius: 0.625rem;
+    /* warm paper white: #FAF9F5 */
+    --background: 50 33% 97%;
+    /* near-black ink: #1A1A17 */
+    --foreground: 60 7% 10%;
+
+    /* surface same as background — no elevated cards */
+    --card: 50 33% 97%;
+    --card-foreground: 60 7% 10%;
+
+    --popover: 45 20% 96%;
+    --popover-foreground: 60 7% 10%;
+
+    /* deep ink-blue accent: #2B3A55 */
+    --primary: 218 33% 25%;
+    --primary-foreground: 50 33% 97%;
+
+    /* secondary surface — barely-off-white */
+    --secondary: 50 20% 93%;
+    --secondary-foreground: 60 7% 10%;
+
+    /* muted areas */
+    --muted: 50 20% 93%;
+    --muted-foreground: 50 5% 42%;
+
+    /* accent same as primary */
+    --accent: 218 33% 25%;
+    --accent-foreground: 50 33% 97%;
+
+    /* danger */
+    --destructive: 356 73% 43%;
+    --destructive-foreground: 50 33% 97%;
+
+    /* hairline rule: #D8D5CC */
+    --border: 43 11% 82%;
+    --input: 43 11% 82%;
+    --ring: 218 33% 25%;
+
+    /* chart — ink tones */
+    --chart-1: 218 33% 25%;
+    --chart-2: 218 25% 45%;
+    --chart-3: 43 25% 55%;
+    --chart-4: 20 30% 45%;
+    --chart-5: 200 20% 40%;
+
+    /* zero radius — editorial is square-cornered */
+    --radius: 0px;
   }
 
+  /* ── Editorial Dark ──────────────────────────────────────────────── */
   .dark {
-    --background: 200 30% 18%;
-    --foreground: 0 0% 92%;
-    --card: 192 30% 27%;
-    --card-foreground: 0 0% 92%;
-    --popover: 192 30% 27%;
-    --popover-foreground: 0 0% 92%;
-    --primary: 174 63% 53%;
-    --primary-foreground: 200 30% 12%;
-    --secondary: 192 30% 27%;
-    --secondary-foreground: 0 0% 92%;
-    --muted: 200 25% 23%;
-    --muted-foreground: 180 15% 65%;
-    --accent: 174 63% 53%;
-    --accent-foreground: 200 30% 12%;
-    --destructive: 0 62% 40%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 192 25% 35%;
-    --input: 192 25% 35%;
-    --ring: 174 63% 53%;
-    --chart-1: 174 63% 53%;
-    --chart-2: 192 38% 50%;
-    --chart-3: 200 30% 60%;
-    --chart-4: 170 50% 55%;
-    --chart-5: 180 40% 60%;
+    /* #161513 */
+    --background: 38 8% 9%;
+    /* #EDEAE0 */
+    --foreground: 45 22% 90%;
+
+    --card: 38 8% 9%;
+    --card-foreground: 45 22% 90%;
+
+    --popover: 38 6% 12%;
+    --popover-foreground: 45 22% 90%;
+
+    /* lightened accent: #7B92B8 */
+    --primary: 215 30% 60%;
+    --primary-foreground: 38 8% 9%;
+
+    --secondary: 38 6% 14%;
+    --secondary-foreground: 45 22% 90%;
+
+    --muted: 38 6% 14%;
+    --muted-foreground: 43 10% 55%;
+
+    --accent: 215 30% 60%;
+    --accent-foreground: 38 8% 9%;
+
+    --destructive: 3 75% 55%;
+    --destructive-foreground: 38 8% 9%;
+
+    /* hairline rule: #33312B */
+    --border: 38 9% 19%;
+    --input: 38 9% 19%;
+    --ring: 215 30% 60%;
+
+    --chart-1: 215 30% 60%;
+    --chart-2: 215 25% 45%;
+    --chart-3: 43 20% 55%;
+    --chart-4: 20 25% 50%;
+    --chart-5: 200 18% 48%;
+
+    --radius: 0px;
   }
 }
 
@@ -63,34 +103,76 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    font-feature-settings: 'kern' 1, 'liga' 1;
+  }
+
+  /* Serif headlines */
+  h1, h2, .font-serif {
+    font-family: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    font-feature-settings: 'kern' 1, 'liga' 1, 'onum' 1;
+  }
+
+  /* Remove all default box-shadows and rounded corners globally */
+  *, *::before, *::after {
+    box-shadow: none !important;
+    border-radius: 0 !important;
   }
 }
 
 @layer utilities {
+  /* Hairline scrollbar */
   .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
+    width: 4px;
   }
   .scrollbar-thin::-webkit-scrollbar-track {
     background: transparent;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    @apply bg-border rounded-full;
+    background: hsl(var(--border));
   }
+
+  /* Rule separator — used like printed table hairlines */
+  .rule {
+    border-top: 1px solid hsl(var(--border));
+  }
+
+  /* Serif display utility */
+  .font-serif {
+    font-family: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  }
+
+  /* Pull-quote numbers */
+  .stat-number {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-variant-numeric: oldstyle-nums;
+    line-height: 1;
+  }
+
+  /* Calendar event pip */
   .calendar-event-day {
     position: relative;
   }
   .calendar-event-day::after {
     content: '';
     position: absolute;
-    bottom: 4px;
+    bottom: 3px;
     left: 50%;
     transform: translateX(-50%);
-    width: 5px;
-    height: 5px;
-    border-radius: 9999px;
-    @apply bg-primary;
+    width: 3px;
+    height: 3px;
+    border-radius: 0 !important;
+    background: hsl(var(--primary));
+  }
+
+  /* No-animation reset — motion only on direct action */
+  .no-anim * {
+    animation: none !important;
+    transition: none !important;
   }
 }

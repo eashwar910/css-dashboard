@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { useTheme } from '@/components/ThemeProvider';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
-import { Code2, Home, CalendarDays, Users, Menu, Sun, Moon, X } from 'lucide-react';
+import { Code2, Home, CalendarDays, Users, Menu, X } from 'lucide-react';
 
 export type View = 'home' | 'calendar' | 'team';
 
@@ -25,72 +24,50 @@ function SidebarContent({
   currentView: View;
   onNavigate: (view: View) => void;
 }) {
-  const { theme, toggleTheme } = useTheme();
-
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 px-6 py-6">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg">
-          <Code2 className="h-5 w-5" />
+    <div className="flex h-full flex-col bg-background">
+      {/* Masthead */}
+      <div className="border-b border-border px-6 py-5">
+        <div className="flex items-center gap-2">
+          <Code2 className="h-4 w-4 text-primary shrink-0" />
+          <span className="font-serif text-base font-semibold tracking-tight">CS Society</span>
         </div>
-        <div>
-          <p className="text-sm font-bold leading-tight">CS Society</p>
-          <p className="text-xs text-muted-foreground">Workspace</p>
-        </div>
+        <p className="mt-0.5 text-xs text-muted-foreground pl-6">Workspace</p>
       </div>
 
-      <nav className="flex-1 px-3 py-4">
-        <p className="px-3 pb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Navigation
-        </p>
-        <ul className="space-y-1">
+      {/* Navigation — plain text links, no icons in active state */}
+      <nav className="flex-1 px-4 py-6">
+        <p className="mb-3 text-xs text-muted-foreground">Navigation</p>
+        <ul className="space-y-0">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = currentView === item.id;
             return (
-              <li key={item.id}>
+              <li key={item.id} className="rule">
                 <button
                   onClick={() => onNavigate(item.id)}
                   className={cn(
-                    'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+                    'flex w-full items-center gap-3 py-2.5 text-sm transition-colors text-left',
                     active
-                      ? 'bg-primary text-primary-foreground shadow-md'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      ? 'text-primary font-medium'
+                      : 'text-muted-foreground hover:text-foreground'
                   )}
                   aria-current={active ? 'page' : undefined}
                 >
-                  <Icon className="h-4 w-4 shrink-0" />
+                  <Icon className="h-3.5 w-3.5 shrink-0 opacity-60" />
                   {item.label}
                 </button>
               </li>
             );
           })}
+          {/* closing hairline */}
+          <li className="rule" />
         </ul>
       </nav>
 
-      <div className="border-t border-border px-3 py-4">
-        <div className="flex items-center justify-between rounded-lg px-3 py-2">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            {theme === 'dark' ? (
-              <Moon className="h-4 w-4" />
-            ) : (
-              <Sun className="h-4 w-4" />
-            )}
-            <span>{theme === 'dark' ? 'Dark' : 'Light'} Mode</span>
-          </div>
-          <button
-            onClick={toggleTheme}
-            className="relative h-6 w-11 rounded-full bg-secondary transition-colors"
-            aria-label="Toggle theme"
-          >
-            <span
-              className={cn(
-                'absolute top-0.5 h-5 w-5 rounded-full bg-primary-foreground shadow transition-transform',
-                theme === 'dark' ? 'translate-x-5' : 'translate-x-0.5'
-              )}
-            />
-          </button>
-        </div>
+      {/* Footer — no theme toggle here, it's global */}
+      <div className="border-t border-border px-6 py-4">
+        <p className="text-xs text-muted-foreground">CS Society Dashboard</p>
       </div>
     </div>
   );
@@ -101,26 +78,24 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside className="hidden w-64 shrink-0 border-r border-border bg-card lg:block">
+      {/* Desktop sidebar — no background elevation, just a right hairline */}
+      <aside className="hidden w-56 shrink-0 border-r border-border lg:block">
         <SidebarContent currentView={currentView} onNavigate={onNavigate} />
       </aside>
 
-      {/* Mobile header with hamburger */}
-      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-card px-4 py-3 lg:hidden">
+      {/* Mobile header */}
+      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background px-5 py-3 lg:hidden">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Code2 className="h-4 w-4" />
-          </div>
-          <span className="text-sm font-bold">CS Society</span>
+          <Code2 className="h-4 w-4 text-primary" />
+          <span className="font-serif text-sm font-semibold">CS Society</span>
         </div>
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon" aria-label="Open menu">
-              <Menu className="h-5 w-5" />
+              <Menu className="h-4 w-4" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-72 p-0">
+          <SheetContent side="left" className="w-56 p-0">
             <SheetTitle className="sr-only">Navigation menu</SheetTitle>
             <div className="absolute right-4 top-4">
               <Button
