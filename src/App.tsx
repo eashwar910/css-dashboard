@@ -6,6 +6,7 @@ import { HomeView } from '@/components/views/HomeView';
 import { CalendarView } from '@/components/views/CalendarView';
 import { TeamView } from '@/components/views/TeamView';
 import { Sun, Moon } from 'lucide-react';
+import { Toaster } from '@/components/ui/toaster';
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
@@ -34,12 +35,13 @@ function App() {
         <Sidebar currentView={view} onNavigate={setView} />
         <main className="flex-1 overflow-y-auto scrollbar-thin">
           <div className="mx-auto max-w-5xl px-8 py-10 sm:px-12 lg:px-16">
-            {view === 'home' && <HomeView />}
+            {view === 'home' && <HomeView onNavigate={setView} />}
             {view === 'calendar' && <CalendarView />}
             {view === 'team' && <TeamView />}
           </div>
         </main>
         <ThemeToggle />
+        <Toaster />
       </div>
     </ThemeProvider>
   );
