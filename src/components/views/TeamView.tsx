@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Mail, GraduationCap, Briefcase, Search, X, AlertCircle } from 'lucide-react';
+import { Mail, GraduationCap, Search, X, AlertCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -21,23 +21,13 @@ function getInitials(name: string) {
 }
 
 export function TeamView() {
-  const { data: members, byDepartment, byYear, isLoading, error } = useTeamMembers();
-
-  // Dynamic stats derived from actual mock data array
-  const departmentCount = Object.keys(byDepartment).length;
-  const yearGroupCount = Object.keys(byYear).length;
-  const roleCount = new Set(members.map((m) => m.role)).size;
+  const { data: members, byYear, isLoading, error } = useTeamMembers();
 
   // Filter and search state
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<string>('all');
 
-  // Dynamic lists of unique departments and years from data
-  const departments = useMemo(() => {
-    return Object.keys(byDepartment).sort();
-  }, [byDepartment]);
-
+  // Dynamic list of unique years from data
   const years = useMemo(() => {
     return Object.keys(byYear).sort();
   }, [byYear]);
@@ -49,22 +39,18 @@ export function TeamView() {
         !searchQuery.trim() ||
         member.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
 
-      const matchesDepartment =
-        selectedDepartment === 'all' || member.department === selectedDepartment;
-
       const matchesYear =
         selectedYear === 'all' || member.year === selectedYear;
 
-      return matchesName && matchesDepartment && matchesYear;
+      return matchesName && matchesYear;
     });
-  }, [members, searchQuery, selectedDepartment, selectedYear]);
+  }, [members, searchQuery, selectedYear]);
 
   const hasActiveFilters =
-    searchQuery.trim() !== '' || selectedDepartment !== 'all' || selectedYear !== 'all';
+    searchQuery.trim() !== '' || selectedYear !== 'all';
 
   const handleResetFilters = () => {
     setSearchQuery('');
-    setSelectedDepartment('all');
     setSelectedYear('all');
   };
 
@@ -88,29 +74,6 @@ export function TeamView() {
           <span>Couldn&apos;t load team directory — try refreshing.</span>
         </div>
       )}
-
-      {/* ── KPI row — pull-quote numbers derived from mock data ─────── */}
-      <section className="border-b border-border pb-10">
-        <div className="grid grid-cols-2 gap-x-8 gap-y-8 sm:grid-cols-4">
-          {[
-            { value: members.length, label: 'Members' },
-            { value: departmentCount, label: 'Departments' },
-            { value: yearGroupCount, label: 'Year Groups' },
-            { value: roleCount, label: 'Roles' },
-          ].map(({ value, label }) => (
-            <div key={label}>
-              {isLoading ? (
-                <Skeleton className="h-12 w-16 mb-1" />
-              ) : (
-                <p className="stat-number text-5xl font-semibold text-primary leading-none">
-                  {value}
-                </p>
-              )}
-              <p className="mt-2 text-xs text-muted-foreground">{label}</p>
-            </div>
-          ))}
-        </div>
-      </section>
 
       {/* ── Team table & filters ──────────────────────────────────────── */}
       <section className="space-y-4">
@@ -152,29 +115,6 @@ export function TeamView() {
               )}
             </div>
 
-            {/* Department dropdown */}
-            <div className="w-full sm:w-44">
-              <Select
-                value={selectedDepartment}
-                onValueChange={setSelectedDepartment}
-              >
-                <SelectTrigger
-                  style={{ borderRadius: 0 }}
-                  className="h-8 text-xs border-border bg-background"
-                >
-                  <SelectValue placeholder="All Departments" />
-                </SelectTrigger>
-                <SelectContent style={{ borderRadius: 0 }}>
-                  <SelectItem value="all">All Departments</SelectItem>
-                  {departments.map((dept) => (
-                    <SelectItem key={dept} value={dept}>
-                      {dept}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
             {/* Year dropdown */}
             <div className="w-full sm:w-32">
               <Select
@@ -212,9 +152,8 @@ export function TeamView() {
         </div>
 
         {/* Table header (desktop only, hidden on mobile below 640px) */}
-        <div className="hidden sm:grid sm:grid-cols-[1fr_auto_auto_auto] items-center gap-x-6 border-b border-border py-2 text-xs text-muted-foreground">
+        <div className="hidden sm:grid sm:grid-cols-[1fr_auto_auto] items-center gap-x-6 border-b border-border py-2 text-xs text-muted-foreground">
           <span>Name &amp; Role</span>
-          <span>Department</span>
           <span>Year</span>
           <span>Contact</span>
         </div>
@@ -225,7 +164,7 @@ export function TeamView() {
             {[1, 2, 3, 4, 5].map((i) => (
               <div
                 key={i}
-                className="flex flex-col sm:grid sm:grid-cols-[1fr_auto_auto_auto] items-start sm:items-center gap-3 sm:gap-x-6 py-3.5"
+                className="flex flex-col sm:grid sm:grid-cols-[1fr_auto_auto] items-start sm:items-center gap-3 sm:gap-x-6 py-3.5"
               >
                 <div className="flex items-center gap-3 w-full sm:w-auto">
                   <Skeleton className="h-7 w-7 shrink-0" />
@@ -234,7 +173,6 @@ export function TeamView() {
                     <Skeleton className="h-3 w-20" />
                   </div>
                 </div>
-                <Skeleton className="hidden sm:block h-3.5 w-28" />
                 <Skeleton className="hidden sm:block h-3.5 w-16" />
                 <Skeleton className="h-3.5 w-12" />
               </div>
@@ -252,7 +190,7 @@ export function TeamView() {
               <div
                 key={member.id}
                 /* Responsive degradation: stacked card on < 640px, tabular row on >= 640px */
-                className="flex flex-col sm:grid sm:grid-cols-[1fr_auto_auto_auto] sm:items-center gap-y-2.5 sm:gap-x-6 py-3.5 transition-colors hover:bg-secondary/40"
+                className="flex flex-col sm:grid sm:grid-cols-[1fr_auto_auto] sm:items-center gap-y-2.5 sm:gap-x-6 py-3.5 transition-colors hover:bg-secondary/40"
               >
                 {/* Name + initials + role + mobile contact */}
                 <div className="flex items-center justify-between sm:justify-start gap-3 min-w-0">
@@ -280,23 +218,12 @@ export function TeamView() {
                   </a>
                 </div>
 
-                {/* Mobile stacked badges for department & year */}
+                {/* Mobile stacked badge for year */}
                 <div className="flex sm:hidden items-center gap-3 text-xs text-muted-foreground pl-10">
-                  <span className="flex items-center gap-1">
-                    <Briefcase className="h-3 w-3 shrink-0" />
-                    <span>{member.department}</span>
-                  </span>
-                  <span className="text-muted-foreground/60">·</span>
                   <span className="flex items-center gap-1">
                     <GraduationCap className="h-3 w-3 shrink-0" />
                     <span>{member.year}</span>
                   </span>
-                </div>
-
-                {/* Desktop: Department */}
-                <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Briefcase className="h-3 w-3 shrink-0" />
-                  <span>{member.department}</span>
                 </div>
 
                 {/* Desktop: Year */}

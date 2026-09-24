@@ -46,6 +46,8 @@ export interface EventsResult extends AsyncResult<Event[]> {
   removeEvent: (id: string) => void;
   /** Alias for removeEvent */
   deleteEvent: (id: string) => void;
+  /** Partial-update an existing event in the shared event store */
+  updateEvent: (id: string, patch: Partial<Event>) => void;
 }
 
 export function useEvents(): EventsResult {
@@ -81,6 +83,11 @@ export function useEvents(): EventsResult {
 
   const removeEvent = useCallback((id: string) => {
     eventsStore = eventsStore.filter((e) => e.id !== id);
+    emitChange();
+  }, []);
+
+  const updateEvent = useCallback((id: string, patch: Partial<Event>) => {
+    eventsStore = eventsStore.map((e) => (e.id === id ? { ...e, ...patch } : e));
     emitChange();
   }, []);
 
@@ -133,5 +140,6 @@ export function useEvents(): EventsResult {
     rsvpEvent,
     removeEvent,
     deleteEvent: removeEvent,
+    updateEvent,
   };
 }

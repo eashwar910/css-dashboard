@@ -44,6 +44,23 @@ export type EventCategory =
   | 'hackathon'
   | 'other';
 
+/** Progression status for an event */
+export type EventStatus = 'scheduled' | 'planning-in-progress' | 'done';
+
+export interface EventTodoItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
+export interface FinanceItem {
+  id: string;
+  description: string;
+  amount: number;
+  /** 'income' | 'expense' */
+  type: 'income' | 'expense';
+}
+
 export interface Event {
   id: string;
   title: string;
@@ -56,6 +73,12 @@ export interface Event {
   category: EventCategory;
   agenda: AgendaItem[];
   rsvpCount: number;
+  /** Progression status label */
+  status?: EventStatus;
+  /** Per-event to-do items */
+  todos?: EventTodoItem[];
+  /** Per-event finance items */
+  financeItems?: FinanceItem[];
 }
 
 // ── TeamMember ───────────────────────────────────────────────────────────────

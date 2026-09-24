@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..900;1,8..60,300..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@100..800&family=Source+Serif+4:ital,opsz,wght@0,8..60,300..900;1,8..60,300..900&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -106,7 +106,7 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Sora', system-ui, -apple-system, sans-serif;
     font-size: 14px;
     line-height: 1.6;
     font-feature-settings: 'kern' 1, 'liga' 1;

@@ -60,9 +60,23 @@ import {
   Check,
   Users,
   AlertCircle,
+  Pencil,
+  X as XIcon,
+  DollarSign,
+  CheckSquare,
+  FileText,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react';
-import type { Event, EventCategory, AgendaItem } from '@/lib/types';
+import type { Event, EventCategory, AgendaItem, EventStatus, EventTodoItem, FinanceItem } from '@/lib/types';
 import { useEvents } from '@/hooks/useEvents';
+
+/** Calendar chip colours, keyed by event progression status. */
+const STATUS_CHIP_CLASSES: Record<EventStatus, string> = {
+  'scheduled': 'border-primary/20 bg-primary/10 text-primary hover:bg-primary/20',
+  'planning-in-progress': 'border-amber-500/30 bg-amber-500/10 text-amber-600 hover:bg-amber-500/20',
+  'done': 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20',
+};
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
@@ -142,7 +156,16 @@ export function CalendarView() {
   const { toast } = useToast();
 
   // Data layer hook acts as the single source of truth across the app
-  const { data: allEvents, isLoading, error, forMonth, addEvent, rsvpEvent, removeEvent } = useEvents();
+  const { data: allEvents, isLoading, error, forMonth, addEvent, rsvpEvent, removeEvent, updateEvent } = useEvents();
+
+  // Event detail dialog tab state
+  const [eventDetailTab, setEventDetailTab] = useState<'overview' | 'todo' | 'finance'>('overview');
+  // Edit date mode state
+  const [editingDates, setEditingDates] = useState(false);
+  const [editStartDate, setEditStartDate] = useState('');
+  const [editStartTime, setEditStartTime] = useState('');
+  const [editEndDate, setEditEndDate] = useState('');
+  const [editEndTime, setEditEndTime] = useState('');
 
   // Keep selectedEvent in sync with store changes (e.g. when RSVP count changes or event is deleted)
   const activeSelectedEvent = useMemo(() => {
@@ -343,7 +366,10 @@ export function CalendarView() {
                               ev.stopPropagation();
                               setSelectedEvent(e);
                             }}
-                            className="truncate text-left border border-primary/20 bg-primary/10 px-1 py-0.5 text-[0.62rem] leading-tight text-primary hover:bg-primary/20 transition-colors"
+                            className={cn(
+                              'truncate text-left border px-1 py-0.5 text-[0.62rem] leading-tight transition-colors',
+                              STATUS_CHIP_CLASSES[e.status ?? 'scheduled']
+                            )}
                           >
                             {e.title}
                           </button>
@@ -635,10 +661,20 @@ export function CalendarView() {
 
       {/* ── Event Detail View Dialog ─────────────────────────────────── */}
       {activeSelectedEvent && (
-        <Dialog open={!!activeSelectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
+        <Dialog
+          open={!!activeSelectedEvent}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedEvent(null);
+              setEventDetailTab('overview');
+              setEditingDates(false);
+            }
+          }}
+        >
           <DialogContent style={{ borderRadius: 0 }} className="max-w-xl border-border max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <div className="flex items-center justify-between gap-2">
+              {/* Top row: badge + route */}
+              <div className="flex items-center gap-2">
                 <Badge variant="outline" style={{ borderRadius: 0 }} className="text-[10px] uppercase tracking-wider capitalize">
                   {activeSelectedEvent.category}
                 </Badge>
@@ -646,84 +682,238 @@ export function CalendarView() {
                   /events/{activeSelectedEvent.id}
                 </span>
               </div>
-              <DialogTitle className="font-serif text-2xl mt-2 font-semibold text-foreground">
-                {activeSelectedEvent.title}
-              </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground">
-                {format(parseISO(activeSelectedEvent.startDateTime), 'EEEE, MMMM d, yyyy')}
-              </DialogDescription>
-            </DialogHeader>
 
-            <div className="space-y-6 pt-2 text-sm">
-              {/* Timing & Location bar */}
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-y border-border py-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5 shrink-0" />
-                  {format(parseISO(activeSelectedEvent.startDateTime), 'h:mm a')}
-                  {' – '}
-                  {format(parseISO(activeSelectedEvent.endDateTime), 'h:mm a')}
-                </span>
-                {activeSelectedEvent.location && (
-                  <span className="flex items-center gap-1.5">
-                    <MapPin className="h-3.5 w-3.5 shrink-0" />
-                    {activeSelectedEvent.location}
-                  </span>
-                )}
-                <span className="flex items-center gap-1.5">
-                  <Users className="h-3.5 w-3.5 shrink-0" />
-                  {activeSelectedEvent.rsvpCount} Going
-                </span>
+              {/* Title + EPF button */}
+              <div className="flex items-center gap-3 mt-2">
+                <DialogTitle className="font-serif text-2xl font-semibold text-foreground">
+                  {activeSelectedEvent.title}
+                </DialogTitle>
+                <button
+                  type="button"
+                  onClick={() => {
+                    toast({ title: 'EPF', description: `Opening Event Planning Form for "${activeSelectedEvent.title}"` });
+                  }}
+                  className="shrink-0 border border-border px-3 py-1 text-[11px] font-semibold tracking-wider uppercase text-foreground hover:border-primary hover:text-primary transition-colors"
+                >
+                  EPF
+                </button>
               </div>
 
-              {/* Description */}
-              {activeSelectedEvent.description && (
-                <div className="space-y-1.5">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    About this event
-                  </h4>
-                  <p className="leading-relaxed text-foreground text-sm">
-                    {activeSelectedEvent.description}
-                  </p>
-                </div>
-              )}
-
-              {/* Full Agenda Mini-Timeline */}
-              <div className="space-y-3 border-t border-border pt-4">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Event Schedule &amp; Timeline
-                </h4>
-
-                {activeSelectedEvent.agenda && activeSelectedEvent.agenda.length > 0 ? (
-                  <div className="relative ml-2 space-y-4 border-l border-border py-1 pl-4">
-                    {activeSelectedEvent.agenda.map((item, index) => (
-                      <div key={index} className="relative">
-                        {/* Timeline dot */}
-                        <div className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full border border-background bg-primary" />
-                        <span className="text-xs font-mono font-medium text-primary">
-                          {item.time}
-                        </span>
-                        <h5 className="text-sm font-semibold text-foreground">
-                          {item.title}
-                        </h5>
-                        {item.description && (
-                          <p className="mt-0.5 text-xs text-muted-foreground leading-normal">
-                            {item.description}
-                          </p>
-                        )}
-                      </div>
-                    ))}
+              {/* Date row with edit toggle */}
+              <div className="flex items-center gap-2 mt-0.5">
+                {editingDates ? (
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <input
+                      type="date"
+                      value={editStartDate}
+                      onChange={(e) => setEditStartDate(e.target.value)}
+                      className="border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:border-primary"
+                      style={{ borderRadius: 0 }}
+                    />
+                    <input
+                      type="time"
+                      value={editStartTime}
+                      onChange={(e) => setEditStartTime(e.target.value)}
+                      className="border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:border-primary"
+                      style={{ borderRadius: 0 }}
+                    />
+                    <span className="text-muted-foreground">→</span>
+                    <input
+                      type="date"
+                      value={editEndDate}
+                      onChange={(e) => setEditEndDate(e.target.value)}
+                      className="border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:border-primary"
+                      style={{ borderRadius: 0 }}
+                    />
+                    <input
+                      type="time"
+                      value={editEndTime}
+                      onChange={(e) => setEditEndTime(e.target.value)}
+                      className="border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:border-primary"
+                      style={{ borderRadius: 0 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (editStartDate && editStartTime && editEndDate && editEndTime) {
+                          updateEvent(activeSelectedEvent.id, {
+                            startDateTime: `${editStartDate}T${editStartTime}:00`,
+                            endDateTime: `${editEndDate}T${editEndTime}:00`,
+                          });
+                          toast({ title: 'Dates updated', description: 'Event dates have been saved.' });
+                        }
+                        setEditingDates(false);
+                      }}
+                      className="border border-primary bg-primary text-primary-foreground px-2 py-1 text-[10px] font-semibold transition-colors hover:opacity-90"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingDates(false)}
+                      className="border border-border px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Cancel
+                    </button>
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground italic">
-                    No breakdown schedule provided for this event.
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <DialogDescription className="text-xs text-muted-foreground">
+                      {format(parseISO(activeSelectedEvent.startDateTime), 'EEEE, MMMM d, yyyy')}
+                    </DialogDescription>
+                    <button
+                      type="button"
+                      title="Edit dates"
+                      onClick={() => {
+                        const s = parseISO(activeSelectedEvent.startDateTime);
+                        const en = parseISO(activeSelectedEvent.endDateTime);
+                        setEditStartDate(format(s, 'yyyy-MM-dd'));
+                        setEditStartTime(format(s, 'HH:mm'));
+                        setEditEndDate(format(en, 'yyyy-MM-dd'));
+                        setEditEndTime(format(en, 'HH:mm'));
+                        setEditingDates(true);
+                      }}
+                      className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  </div>
                 )}
               </div>
+            </DialogHeader>
+
+            {/* ── Progression Status ── */}
+            <div className="flex items-center gap-2 pt-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status:</span>
+              {(['scheduled', 'planning-in-progress', 'done'] as EventStatus[]).map((s) => {
+                const isActive = (activeSelectedEvent.status ?? 'scheduled') === s;
+                const labels: Record<EventStatus, string> = {
+                  'scheduled': 'Scheduled',
+                  'planning-in-progress': 'Planning in Progress',
+                  'done': 'Done',
+                };
+                const colors: Record<EventStatus, string> = {
+                  'scheduled': 'border-border text-muted-foreground hover:border-foreground hover:text-foreground',
+                  'planning-in-progress': 'border-amber-500/60 text-amber-600 hover:border-amber-500 hover:text-amber-600',
+                  'done': 'border-emerald-500/60 text-emerald-600 hover:border-emerald-500 hover:text-emerald-600',
+                };
+                const activeColors: Record<EventStatus, string> = {
+                  'scheduled': 'bg-foreground text-background border-foreground',
+                  'planning-in-progress': 'bg-amber-500 text-white border-amber-500',
+                  'done': 'bg-emerald-500 text-white border-emerald-500',
+                };
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => updateEvent(activeSelectedEvent.id, { status: s })}
+                    className={cn(
+                      'border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors',
+                      isActive ? activeColors[s] : colors[s]
+                    )}
+                  >
+                    {labels[s]}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* ── Inner Tab Nav: Overview / To-do / Finance Reports ── */}
+            <div className="flex border-b border-border mt-2">
+              {(['overview', 'todo', 'finance'] as const).map((tab) => {
+                const tabLabels = { overview: 'Overview', todo: 'To-do', finance: 'Finance Reports' };
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setEventDetailTab(tab)}
+                    className={cn(
+                      'px-4 py-2 text-xs font-semibold tracking-wide transition-colors border-b-2 -mb-px',
+                      eventDetailTab === tab
+                        ? 'border-foreground text-foreground'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {tabLabels[tab]}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* ── Timing & Location bar (always visible) ── */}
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border py-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5 shrink-0" />
+                {format(parseISO(activeSelectedEvent.startDateTime), 'h:mm a')}
+                {' – '}
+                {format(parseISO(activeSelectedEvent.endDateTime), 'h:mm a')}
+              </span>
+              {activeSelectedEvent.location && (
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 shrink-0" />
+                  {activeSelectedEvent.location}
+                </span>
+              )}
+              <span className="flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5 shrink-0" />
+                {activeSelectedEvent.rsvpCount} Going
+              </span>
+            </div>
+
+            {/* ── Tab Panels ── */}
+            <div className="space-y-6 pt-2 text-sm min-h-[180px]">
+
+              {/* ── OVERVIEW TAB ── */}
+              {eventDetailTab === 'overview' && (
+                <>
+                  {activeSelectedEvent.description && (
+                    <div className="space-y-1.5">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        About this event
+                      </h4>
+                      <p className="leading-relaxed text-foreground text-sm">
+                        {activeSelectedEvent.description}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="space-y-3 border-t border-border pt-4">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Event Schedule &amp; Timeline
+                    </h4>
+                    {activeSelectedEvent.agenda && activeSelectedEvent.agenda.length > 0 ? (
+                      <div className="relative ml-2 space-y-4 border-l border-border py-1 pl-4">
+                        {activeSelectedEvent.agenda.map((item, index) => (
+                          <div key={index} className="relative">
+                            <div className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full border border-background bg-primary" />
+                            <span className="text-xs font-mono font-medium text-primary">{item.time}</span>
+                            <h5 className="text-sm font-semibold text-foreground">{item.title}</h5>
+                            {item.description && (
+                              <p className="mt-0.5 text-xs text-muted-foreground leading-normal">{item.description}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic">No breakdown schedule provided for this event.</p>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* ── TO-DO TAB ── */}
+              {eventDetailTab === 'todo' && (
+                <EventTodoPanel event={activeSelectedEvent} onUpdate={(patch) => updateEvent(activeSelectedEvent.id, patch)} />
+              )}
+
+              {/* ── FINANCE REPORTS TAB ── */}
+              {eventDetailTab === 'finance' && (
+                <EventFinancePanel event={activeSelectedEvent} onUpdate={(patch) => updateEvent(activeSelectedEvent.id, patch)} />
+              )}
             </div>
 
             <DialogFooter className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">
               <div className="flex flex-wrap items-center gap-2">
-                {/* RSVP Going button */}
                 <Button
                   size="sm"
                   variant={rsvpedEventIds.has(activeSelectedEvent.id) ? 'secondary' : 'default'}
@@ -737,13 +927,10 @@ export function CalendarView() {
                       You&apos;re Going ({activeSelectedEvent.rsvpCount})
                     </>
                   ) : (
-                    <>
-                      Going ({activeSelectedEvent.rsvpCount})
-                    </>
+                    <>Going ({activeSelectedEvent.rsvpCount})</>
                   )}
                 </Button>
 
-                {/* Add to Calendar (.ics) button */}
                 <Button
                   type="button"
                   size="sm"
@@ -755,7 +942,6 @@ export function CalendarView() {
                   Add to calendar (.ics)
                 </Button>
 
-                {/* Delete Event button */}
                 <Button
                   type="button"
                   size="sm"
@@ -774,7 +960,7 @@ export function CalendarView() {
                 size="sm"
                 variant="ghost"
                 style={{ borderRadius: 0 }}
-                onClick={() => setSelectedEvent(null)}
+                onClick={() => { setSelectedEvent(null); setEventDetailTab('overview'); setEditingDates(false); }}
               >
                 Close
               </Button>
@@ -824,6 +1010,253 @@ export function CalendarView() {
         </AlertDialogContent>
       </AlertDialog>
 
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EventTodoPanel — per-event to-do list
+// ─────────────────────────────────────────────────────────────────────────────
+
+function EventTodoPanel({
+  event,
+  onUpdate,
+}: {
+  event: Event;
+  onUpdate: (patch: Partial<Event>) => void;
+}) {
+  const [newText, setNewText] = useState('');
+  const todos: EventTodoItem[] = event.todos ?? [];
+
+  const addTodo = () => {
+    const text = newText.trim();
+    if (!text) return;
+    onUpdate({
+      todos: [...todos, { id: `todo-${Date.now()}`, text, completed: false }],
+    });
+    setNewText('');
+  };
+
+  const toggleTodo = (id: string) => {
+    onUpdate({
+      todos: todos.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)),
+    });
+  };
+
+  const deleteTodo = (id: string) => {
+    onUpdate({ todos: todos.filter((t) => t.id !== id) });
+  };
+
+  return (
+    <div className="space-y-4">
+      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+        <CheckSquare className="h-3.5 w-3.5" />
+        To-do List
+      </h4>
+
+      {/* Add new todo */}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={newText}
+          onChange={(e) => setNewText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && addTodo()}
+          placeholder="Add a task..."
+          className="flex-1 border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+          style={{ borderRadius: 0 }}
+        />
+        <button
+          type="button"
+          onClick={addTodo}
+          className="border border-border px-3 py-1.5 text-xs text-foreground hover:border-primary hover:text-primary transition-colors flex items-center gap-1"
+        >
+          <Plus className="h-3 w-3" />
+          Add
+        </button>
+      </div>
+
+      {/* Todo list */}
+      {todos.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic">No tasks yet. Add one above.</p>
+      ) : (
+        <div className="divide-y divide-border">
+          {todos.map((todo) => (
+            <div key={todo.id} className="flex items-center gap-3 py-2.5 group">
+              <button
+                type="button"
+                onClick={() => toggleTodo(todo.id)}
+                className={cn(
+                  'h-4 w-4 shrink-0 border flex items-center justify-center transition-colors',
+                  todo.completed
+                    ? 'bg-primary border-primary text-primary-foreground'
+                    : 'border-border hover:border-primary'
+                )}
+              >
+                {todo.completed && <Check className="h-2.5 w-2.5" />}
+              </button>
+              <span className={cn('flex-1 text-xs', todo.completed && 'line-through text-muted-foreground')}>
+                {todo.text}
+              </span>
+              <button
+                type="button"
+                onClick={() => deleteTodo(todo.id)}
+                className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-destructive transition-all"
+              >
+                <XIcon className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {todos.length > 0 && (
+        <p className="text-[11px] text-muted-foreground">
+          {todos.filter((t) => t.completed).length} / {todos.length} completed
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EventFinancePanel — per-event finance / budget tracker
+// ─────────────────────────────────────────────────────────────────────────────
+
+function EventFinancePanel({
+  event,
+  onUpdate,
+}: {
+  event: Event;
+  onUpdate: (patch: Partial<Event>) => void;
+}) {
+  const [desc, setDesc] = useState('');
+  const [amount, setAmount] = useState('');
+  const [type, setType] = useState<'income' | 'expense'>('expense');
+  const items: FinanceItem[] = event.financeItems ?? [];
+
+  const addItem = () => {
+    const d = desc.trim();
+    const a = parseFloat(amount);
+    if (!d || isNaN(a) || a <= 0) return;
+    onUpdate({
+      financeItems: [...items, { id: `fi-${Date.now()}`, description: d, amount: a, type }],
+    });
+    setDesc('');
+    setAmount('');
+  };
+
+  const deleteItem = (id: string) => {
+    onUpdate({ financeItems: items.filter((i) => i.id !== id) });
+  };
+
+  const totalIncome = items.filter((i) => i.type === 'income').reduce((s, i) => s + i.amount, 0);
+  const totalExpense = items.filter((i) => i.type === 'expense').reduce((s, i) => s + i.amount, 0);
+  const net = totalIncome - totalExpense;
+
+  return (
+    <div className="space-y-4">
+      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+        <DollarSign className="h-3.5 w-3.5" />
+        Finance Report
+      </h4>
+
+      {/* Summary pills */}
+      {items.length > 0 && (
+        <div className="flex flex-wrap gap-3 text-xs">
+          <div className="flex items-center gap-1.5 border border-emerald-500/40 px-3 py-1.5 text-emerald-600">
+            <TrendingUp className="h-3 w-3" />
+            <span>Income: <strong>£{totalIncome.toFixed(2)}</strong></span>
+          </div>
+          <div className="flex items-center gap-1.5 border border-destructive/40 px-3 py-1.5 text-destructive">
+            <TrendingDown className="h-3 w-3" />
+            <span>Expenses: <strong>£{totalExpense.toFixed(2)}</strong></span>
+          </div>
+          <div className={cn(
+            'flex items-center gap-1.5 border px-3 py-1.5 font-semibold',
+            net >= 0 ? 'border-emerald-500/40 text-emerald-600' : 'border-destructive/40 text-destructive'
+          )}>
+            Net: £{net.toFixed(2)}
+          </div>
+        </div>
+      )}
+
+      {/* Add new finance item */}
+      <div className="flex flex-wrap gap-2">
+        <input
+          type="text"
+          value={desc}
+          onChange={(e) => setDesc(e.target.value)}
+          placeholder="Description..."
+          className="flex-1 min-w-[120px] border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+          style={{ borderRadius: 0 }}
+        />
+        <input
+          type="number"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="Amount £"
+          min="0"
+          step="0.01"
+          className="w-28 border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+          style={{ borderRadius: 0 }}
+        />
+        <div className="flex border border-border text-xs">
+          <button
+            type="button"
+            onClick={() => setType('income')}
+            className={cn(
+              'px-3 py-1.5 font-medium transition-colors',
+              type === 'income' ? 'bg-emerald-500 text-white' : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            Income
+          </button>
+          <button
+            type="button"
+            onClick={() => setType('expense')}
+            className={cn(
+              'px-3 py-1.5 font-medium transition-colors border-l border-border',
+              type === 'expense' ? 'bg-destructive text-destructive-foreground' : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            Expense
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={addItem}
+          className="border border-border px-3 py-1.5 text-xs text-foreground hover:border-primary hover:text-primary transition-colors flex items-center gap-1"
+        >
+          <Plus className="h-3 w-3" />
+          Add
+        </button>
+      </div>
+
+      {/* Finance items list */}
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic">No entries yet. Add income or expense above.</p>
+      ) : (
+        <div className="divide-y divide-border">
+          {items.map((item) => (
+            <div key={item.id} className="flex items-center gap-3 py-2.5 group">
+              <span className={cn('text-xs shrink-0', item.type === 'income' ? 'text-emerald-600' : 'text-destructive')}>
+                {item.type === 'income' ? '+' : '–'}
+              </span>
+              <span className="flex-1 text-xs text-foreground">{item.description}</span>
+              <span className={cn('text-xs font-semibold shrink-0', item.type === 'income' ? 'text-emerald-600' : 'text-destructive')}>
+                £{item.amount.toFixed(2)}
+              </span>
+              <button
+                type="button"
+                onClick={() => deleteItem(item.id)}
+                className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-destructive transition-all"
+              >
+                <XIcon className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
