@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
-import { Code2, Home, CalendarDays, Users, Menu, X } from 'lucide-react';
+import { Code2, Home, CalendarDays, Users, Menu, X, LogOut } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 
 export type View = 'home' | 'calendar' | 'team';
 
@@ -24,6 +25,8 @@ function SidebarContent({
   currentView: View;
   onNavigate: (view: View) => void;
 }) {
+  const { user, member, signOut } = useAuth();
+
   return (
     <div className="flex h-full flex-col bg-background">
       {/* Masthead */}
@@ -65,9 +68,22 @@ function SidebarContent({
         </ul>
       </nav>
 
-      {/* Footer — no theme toggle here, it's global */}
+      {/* Footer — signed-in member + log out (theme toggle is global) */}
       <div className="border-t border-border px-6 py-4">
-        <p className="text-xs text-muted-foreground">CS Society Dashboard</p>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{member?.full_name ?? user?.email}</p>
+          {member?.role && (
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">{member.role}</p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={signOut}
+          className="mt-3 flex items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <LogOut className="h-3.5 w-3.5 shrink-0" />
+          Log Out
+        </button>
       </div>
     </div>
   );
