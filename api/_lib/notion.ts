@@ -1,6 +1,6 @@
 // Shared Notion client, data source IDs, paginated queries and a small cache.
 
-import { Client, isFullPage } from '@notionhq/client';
+import { Client, isFullPage, isNotionClientError } from '@notionhq/client';
 import type { PageObjectResponse, QueryDataSourceParameters } from '@notionhq/client';
 import { requireEnv } from './env.js';
 
@@ -51,6 +51,26 @@ export async function queryAll(dataSourceId: string, params: QueryParams = {}): 
     cursor = res.has_more ? res.next_cursor ?? undefined : undefined;
   } while (cursor);
   return pages;
+}
+
+/**
+ * Read a page fresh from Notion (never cached) and return it only if it's a
+ * live row of the given data source. Returns null for anything else: a page
+ * in another data source, a trashed page, or one the integration can't see.
+ */
+export async function retrievePageIn(name: DataSourceName, pageId: string): Promise<PageObjectResponse | null> {
+  let page;
+  try {
+    page = await notion().pages.retrieve({ page_id: pageId });
+  } catch (err) {
+    if (isNotionClientError(err) && (err.code === 'object_not_found' || err.code === 'validation_error')) return null;
+    throw err;
+  }
+  if (!isFullPage(page) || page.in_trash) return null;
+  const parent = page.parent;
+  const strip = (id: string) => id.replace(/-/g, '');
+  if (parent.type !== 'data_source_id' || strip(parent.data_source_id) !== strip(dataSourceId(name))) return null;
+  return page;
 }
 
 // ── 60s in-memory cache ──────────────────────────────────────────────────────

@@ -27,6 +27,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   ExternalLink,
+  Pencil,
+  Plus,
   MapPin,
   CheckCircle2,
   Circle,
@@ -47,7 +49,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import type { Event } from '@/lib/types';
+import type { Event, Task } from '@/lib/types';
+import { TaskEditDialog } from '@/components/TaskEditDialog';
 import type { View } from '@/components/Sidebar';
 import { EVENT_FEATURES } from '@/lib/features';
 import { TbaTag } from '@/components/TbaTag';
@@ -113,6 +116,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
     weeklyGroups,
     notionLinked,
     toggleTask,
+    createTask,
     isLoading: tasksLoading,
     error: tasksError,
   } = useTasks();
@@ -129,6 +133,33 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
   const { toast } = useToast();
 
   const completedCount = useMemo(() => tasks.filter((t) => t.completed).length, [tasks]);
+
+  // Weekly to-do writes (saved to Notion; the server re-checks permissions)
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [addingTask, setAddingTask] = useState(false);
+
+  const handleToggleTask = (id: string) => {
+    toggleTask(id).catch((err: unknown) =>
+      toast({ title: "Couldn't update task", description: (err as Error).message, variant: 'destructive' })
+    );
+  };
+
+  const handleAddTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const title = newTaskTitle.trim();
+    if (!title || addingTask) return;
+    setAddingTask(true);
+    try {
+      const { warning } = await createTask({ title });
+      setNewTaskTitle('');
+      if (warning) toast({ title: 'Task added without a PIC', description: warning });
+    } catch (err) {
+      toast({ title: "Couldn't add task", description: (err as Error).message, variant: 'destructive' });
+    } finally {
+      setAddingTask(false);
+    }
+  };
 
   // Dated upcoming events/meetings (already sorted), then events with no date
   // yet that aren't done. Most events are TBA, so they're shown here too.
@@ -531,11 +562,18 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
                 </h3>
                 <ul className="divide-y divide-border">
                   {group.tasks.map((task) => (
-                    <li key={task.id}>
-                      <label className="flex cursor-pointer items-start gap-3 py-3 transition-colors hover:text-primary">
+                    <li key={task.id} className="group flex items-start gap-1">
+                      <label
+                        className={cn(
+                          'flex flex-1 min-w-0 items-start gap-3 py-3 transition-colors',
+                          task.can.toggle ? 'cursor-pointer hover:text-primary' : 'cursor-default'
+                        )}
+                        title={task.can.toggle ? undefined : 'Only the PIC or an admin can tick this'}
+                      >
                         <Checkbox
                           checked={task.completed}
-                          onCheckedChange={() => toggleTask(task.id)}
+                          disabled={!task.can.toggle}
+                          onCheckedChange={() => handleToggleTask(task.id)}
                           className="mt-0.5 shrink-0"
                         />
                         <div className="flex-1 min-w-0">
@@ -565,6 +603,17 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
                           </p>
                         </div>
                       </label>
+                      {task.can.edit && (
+                        <button
+                          type="button"
+                          title="Edit task"
+                          aria-label={`Edit task ${task.title}`}
+                          onClick={() => setEditingTask(task)}
+                          className="mt-3 p-1 text-muted-foreground opacity-0 transition-all hover:text-primary group-hover:opacity-100 focus:opacity-100"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -572,6 +621,26 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
                 ))}
               </ScrollArea>
             )}
+
+            {/* Add a task for yourself (no event → "General") */}
+            {!tasksLoading && !tasksError && (
+              <form onSubmit={handleAddTask} className="mt-3 flex gap-2">
+                <Input
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  placeholder="Add a task for yourself…"
+                  disabled={addingTask}
+                  style={{ borderRadius: 0 }}
+                  className="h-8 text-xs"
+                />
+                <Button type="submit" size="sm" variant="outline" style={{ borderRadius: 0 }} className="h-8 text-xs" disabled={addingTask || !newTaskTitle.trim()}>
+                  <Plus className="mr-1 h-3 w-3" />
+                  {addingTask ? 'Adding…' : 'Add'}
+                </Button>
+              </form>
+            )}
+
+            <TaskEditDialog task={editingTask} onOpenChange={(open) => !open && setEditingTask(null)} />
           </section>
 
           {/* ── Announcements ───────────────────────────────────────── */}

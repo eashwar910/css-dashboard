@@ -4,6 +4,7 @@
 import type { PageObjectResponse } from '@notionhq/client';
 import type { CommitteeMember } from './auth.js';
 import { eventPages } from './events.js';
+import { canModifyTask } from './ownership.js';
 import { cached, dataSourceId, queryAll } from './notion.js';
 import { date, people, relationIds, status, title } from './props.js';
 
@@ -31,7 +32,12 @@ export interface TaskDto {
   sharedWith: string | null;
   /** Shown in the weekly scrum view: mine or shared, and not Done or Done this week. */
   weekly: boolean;
+  /** What the signed-in member may do (ownership.ts). The server re-checks on every write. */
+  can: { toggle: boolean; edit: boolean; delete: boolean };
 }
+
+/** The member fields task mapping needs. */
+export type TaskViewer = Pick<CommitteeMember, 'email' | 'notionEmail' | 'isAdmin'>;
 
 const STATUS_MAP: Record<string, TaskStatusDto> = {
   'Not started': 'todo',
@@ -67,14 +73,14 @@ export function klWeek(now = new Date()): { start: Date; end: Date } {
 // ── Mapping ──────────────────────────────────────────────────────────────────
 
 /** Whether any PIC person on the task is this member (login email or notion_email). */
-export function isMine(page: PageObjectResponse, member: Pick<CommitteeMember, 'email' | 'notionEmail'>): boolean {
+export function isMine(page: PageObjectResponse, member: Pick<TaskViewer, 'email' | 'notionEmail'>): boolean {
   const emails = new Set([member.email, member.notionEmail].filter((e): e is string => !!e).map((e) => e.toLowerCase()));
   return people(page, 'PIC').some((p) => p.email !== null && emails.has(p.email.toLowerCase()));
 }
 
 export function toTask(
   page: PageObjectResponse,
-  member: Pick<CommitteeMember, 'email' | 'notionEmail'>,
+  member: TaskViewer,
   eventNames: Map<string, string>,
   week: { start: Date; end: Date },
 ): TaskDto {
@@ -97,6 +103,11 @@ export function toTask(
     shared: shared !== null,
     sharedWith: shared,
     weekly: (mine || shared !== null) && (taskStatus !== 'done' || doneThisWeek),
+    can: {
+      toggle: canModifyTask(member, page, 'toggle').allowed,
+      edit: canModifyTask(member, page, 'edit').allowed,
+      delete: canModifyTask(member, page, 'delete').allowed,
+    },
   };
 }
 
@@ -112,10 +123,17 @@ export async function taskPages(): Promise<PageObjectResponse[]> {
   return cached('tasks:pages', () => queryAll(dataSourceId('tasks')));
 }
 
-export async function loadTasks(member: Pick<CommitteeMember, 'email' | 'notionEmail'>, now = new Date()) {
-  const [pages, events] = await Promise.all([taskPages(), eventPages()]);
-  const eventNames = new Map(events.map((e) => [e.id, title(e, 'Name') ?? 'Untitled event']));
-  const week = klWeek(now);
+/** Event id → name (for project labels) and the current week, shared by reads and writes. */
+export async function taskContext(now = new Date()) {
+  const events = await eventPages();
+  return {
+    eventNames: new Map(events.map((e) => [e.id, title(e, 'Name') ?? 'Untitled event'])),
+    week: klWeek(now),
+  };
+}
+
+export async function loadTasks(member: TaskViewer, now = new Date()) {
+  const [pages, { eventNames, week }] = await Promise.all([taskPages(), taskContext(now)]);
   return {
     tasks: pages.map((p) => toTask(p, member, eventNames, week)).sort(compareTasks),
     weekStart: week.start.toISOString(),

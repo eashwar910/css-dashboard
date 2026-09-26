@@ -67,9 +67,10 @@ import {
   TrendingDown,
   ExternalLink,
 } from 'lucide-react';
-import type { Event, EventCategory, AgendaItem, EventStatus, EventTodoItem, FinanceItem } from '@/lib/types';
+import type { Event, EventCategory, AgendaItem, EventStatus, EventTodoItem, FinanceItem, Task } from '@/lib/types';
 import { useEvents } from '@/hooks/useEvents';
-import { EVENT_FEATURES, TASK_FEATURES } from '@/lib/features';
+import { EVENT_FEATURES } from '@/lib/features';
+import { TaskEditDialog } from '@/components/TaskEditDialog';
 import { useTasks } from '@/hooks/useTasks';
 import { TbaTag } from '@/components/TbaTag';
 import {
@@ -1102,15 +1103,37 @@ export function CalendarView() {
 
 function EventTodoPanel({ eventId }: { eventId: string }) {
   const [newText, setNewText] = useState('');
-  const { forEvent, toggleTask, isLoading, error } = useTasks();
+  const [adding, setAdding] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const { forEvent, toggleTask, createTask, deleteTask, isLoading, error } = useTasks();
+  const { toast } = useToast();
   // The event's to-dos are the Notion Tasks linked to it.
-  const todos: EventTodoItem[] = forEvent(eventId).map((t) => ({ id: t.id, text: t.title, completed: t.completed }));
+  const tasks = forEvent(eventId);
+  const todos: (EventTodoItem & { task: Task })[] = tasks.map((t) => ({ id: t.id, text: t.title, completed: t.completed, task: t }));
 
-  // Ticking is local-only for now. Adding and deleting need task writes
-  // (docs/PLAN.md step 7), so their controls are hidden via TASK_FEATURES.
-  const toggleTodo = (id: string) => toggleTask(id);
-  const addTodo: () => void = () => {};
-  const deleteTodo: (id: string) => void = () => {};
+  const fail = (title: string) => (err: unknown) =>
+    toast({ title, description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
+
+  const addTodo = async () => {
+    const text = newText.trim();
+    if (!text || adding) return;
+    setAdding(true);
+    try {
+      const { warning } = await createTask({ title: text, eventId });
+      setNewText('');
+      if (warning) toast({ title: 'Task added without a PIC', description: warning });
+    } catch (err) {
+      fail("Couldn't add task")(err);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const toggleTodo = (id: string) => void toggleTask(id).catch(fail("Couldn't update task"));
+  const deleteTodo = (id: string) =>
+    void deleteTask(id)
+      .then(() => toast({ title: 'Task deleted', description: 'Moved to Notion trash.' }))
+      .catch(fail("Couldn't delete task"));
 
   return (
     <div className="space-y-4">
@@ -1119,8 +1142,7 @@ function EventTodoPanel({ eventId }: { eventId: string }) {
         To-do List
       </h4>
 
-      {/* Add new todo */}
-      {TASK_FEATURES.editing && (
+      {/* Add new todo: creates a Notion task linked to this event, with you as PIC */}
       <div className="flex gap-2">
         <input
           type="text"
@@ -1128,19 +1150,20 @@ function EventTodoPanel({ eventId }: { eventId: string }) {
           onChange={(e) => setNewText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && addTodo()}
           placeholder="Add a task..."
-          className="flex-1 border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+          disabled={adding}
+          className="flex-1 border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary disabled:opacity-60"
           style={{ borderRadius: 0 }}
         />
         <button
           type="button"
           onClick={addTodo}
-          className="border border-border px-3 py-1.5 text-xs text-foreground hover:border-primary hover:text-primary transition-colors flex items-center gap-1"
+          disabled={adding || !newText.trim()}
+          className="border border-border px-3 py-1.5 text-xs text-foreground hover:border-primary hover:text-primary transition-colors flex items-center gap-1 disabled:opacity-50"
         >
           <Plus className="h-3 w-3" />
-          Add
+          {adding ? 'Adding…' : 'Add'}
         </button>
       </div>
-      )}
 
       {/* Todo list */}
       {isLoading ? (
@@ -1148,7 +1171,7 @@ function EventTodoPanel({ eventId }: { eventId: string }) {
       ) : error ? (
         <p className="text-xs text-destructive">Couldn&apos;t load tasks — try refreshing.</p>
       ) : todos.length === 0 ? (
-        <p className="text-xs text-muted-foreground italic">No tasks are linked to this event in Notion yet.</p>
+        <p className="text-xs text-muted-foreground italic">No tasks are linked to this event yet. Add one above.</p>
       ) : (
         <div className="divide-y divide-border">
           {todos.map((todo) => (
@@ -1156,8 +1179,10 @@ function EventTodoPanel({ eventId }: { eventId: string }) {
               <button
                 type="button"
                 onClick={() => toggleTodo(todo.id)}
+                disabled={!todo.task.can.toggle}
+                title={todo.task.can.toggle ? undefined : 'Only the PIC or an admin can tick this'}
                 className={cn(
-                  'h-4 w-4 shrink-0 border flex items-center justify-center transition-colors',
+                  'h-4 w-4 shrink-0 border flex items-center justify-center transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                   todo.completed
                     ? 'bg-primary border-primary text-primary-foreground'
                     : 'border-border hover:border-primary'
@@ -1167,12 +1192,28 @@ function EventTodoPanel({ eventId }: { eventId: string }) {
               </button>
               <span className={cn('flex-1 text-xs', todo.completed && 'line-through text-muted-foreground')}>
                 {todo.text}
+                {todo.task.sharedWith && (
+                  <span className="ml-2 text-[10px] text-muted-foreground">{todo.task.sharedWith}</span>
+                )}
               </span>
-              {TASK_FEATURES.editing && (
+              {todo.task.can.edit && (
                 <button
                   type="button"
+                  title="Edit task"
+                  aria-label={`Edit task ${todo.text}`}
+                  onClick={() => setEditingTask(todo.task)}
+                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-0.5 text-muted-foreground hover:text-primary transition-all"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              )}
+              {todo.task.can.delete && (
+                <button
+                  type="button"
+                  title="Delete task"
+                  aria-label={`Delete task ${todo.text}`}
                   onClick={() => deleteTodo(todo.id)}
-                  className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-destructive transition-all"
+                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-0.5 text-muted-foreground hover:text-destructive transition-all"
                 >
                   <XIcon className="h-3 w-3" />
                 </button>
@@ -1187,6 +1228,8 @@ function EventTodoPanel({ eventId }: { eventId: string }) {
           {todos.filter((t) => t.completed).length} / {todos.length} completed
         </p>
       )}
+
+      <TaskEditDialog task={editingTask} onOpenChange={(open) => !open && setEditingTask(null)} />
     </div>
   );
 }

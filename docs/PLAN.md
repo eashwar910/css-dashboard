@@ -123,7 +123,7 @@ Every ringgit in or out is one row. Exact property names and options are in `NOT
 4. ~~Documents (read).~~ **Done.**
 5. ~~Events and Meetings (read), including the TBA tag, `kind`, and optional status and dates.~~ **Done.**
 6. ~~Tasks and weekly scrum (read).~~ **Done** (ticking is local-only until step 7).
-7. Task writes: tick/untick, create, edit, delete, with the ownership rules.
+7. ~~Task writes: tick/untick, create, edit, delete, with the ownership rules.~~ **Done** (`/api/tasks` POST/PATCH/DELETE).
 8. Finance: read and write for Transactions, including reimbursement status.
 9. Supabase: add the nullable `notion_email` column to `committee_members`. The SQL comes from the agent in step 2; the owner runs it.
 10. Final sweep: remove leftover mock arrays and artificial delays, and list anything still hard-coded.

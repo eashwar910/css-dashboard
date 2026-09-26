@@ -34,6 +34,18 @@ export interface Task {
   sharedWith?: string;
   /** Included in the weekly scrum view (mine or shared; not Done, or Done this week). */
   weekly: boolean;
+  /** What the signed-in member may do. The server re-checks every write. */
+  can: { toggle: boolean; edit: boolean; delete: boolean };
+}
+
+/** Fields that can be sent when creating or editing a task. null clears a field. */
+export interface TaskInput {
+  title?: string;
+  /** YYYY-MM-DD, or null to clear. */
+  dueDate?: string | null;
+  status?: TaskStatus;
+  /** Team Dashboard > Events page id, or null to unlink. */
+  eventId?: string | null;
 }
 
 // ── Event ────────────────────────────────────────────────────────────────────

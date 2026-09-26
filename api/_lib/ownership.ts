@@ -25,7 +25,7 @@ export interface OwnershipDecision {
 export const TASK_PIC_PROPERTY = 'PIC';
 
 export function canModifyTask(
-  member: CommitteeMember,
+  member: Pick<CommitteeMember, 'email' | 'notionEmail' | 'isAdmin'>,
   taskPage: Pick<PageObjectResponse, 'properties'>,
   action: TaskAction,
 ): OwnershipDecision {
