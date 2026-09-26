@@ -64,7 +64,6 @@ import {
   X as XIcon,
   DollarSign,
   CheckSquare,
-  FileText,
   TrendingUp,
   TrendingDown,
 } from 'lucide-react';

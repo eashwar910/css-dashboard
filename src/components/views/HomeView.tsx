@@ -102,7 +102,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
   const { data: allTasks, isLoading: tasksLoading, error: tasksError } = useTasks();
   const { upcoming: upcomingEvents, data: allEvents, isLoading: eventsLoading, error: eventsError, removeEvent } = useEvents();
   const { data: documents, isLoading: docsLoading, error: docsError } = useDocuments();
-  const { data: teamMembers, isLoading: membersLoading } = useTeamMembers();
+  const { data: teamMembers } = useTeamMembers();
 
   // Search input state
   const [searchQuery, setSearchQuery] = useState('');
@@ -154,7 +154,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
       (m) =>
         m.name.toLowerCase().includes(q) ||
         m.role.toLowerCase().includes(q) ||
-        m.department.toLowerCase().includes(q)
+        (m.department?.toLowerCase().includes(q) ?? false)
     );
 
     return {
@@ -310,7 +310,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
                           {m.name}
                         </p>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
-                          {m.role} · {m.department}
+                          {[m.role, m.department].filter(Boolean).join(' · ')}
                         </p>
                       </li>
                     ))}

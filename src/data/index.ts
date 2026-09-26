@@ -3,5 +3,4 @@
 // from UI components — always go through the hooks.
 export { mockTasks } from './tasks';
 export { mockEvents } from './events';
-export { mockTeamMembers } from './team';
 export { mockDocuments } from './documents';

@@ -8,7 +8,7 @@
 // Components should import from hooks instead:
 //   useTasks()        → src/hooks/useTasks.ts
 //   useEvents()       → src/hooks/useEvents.ts
-//   useTeamMembers()  → src/hooks/useTeamMembers.ts
+//   useTeamMembers()  → src/hooks/useTeamMembers.ts (real data via /api/team)
 //   useDocuments()    → src/hooks/useDocuments.ts
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -18,5 +18,4 @@ export type { Task, Event as EventItem, TeamMember, Document as DocumentLink } f
 // Re-export mock arrays under the old names
 export { mockTasks as weeklyTasks } from './tasks';
 export { mockEvents as upcomingEvents, mockEvents as monthlyEvents } from './events';
-export { mockTeamMembers as teamMembers } from './team';
 export { mockDocuments as documents } from './documents';

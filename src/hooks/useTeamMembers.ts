@@ -1,60 +1,65 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import type { AsyncResult, TeamMember } from '@/lib/types';
-import { mockTeamMembers } from '@/data';
+import { useApiResource } from '@/hooks/useApiResource';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // useTeamMembers
 //
-// Returns all team members plus grouping helpers.
-// Simulates an artificial latency (400ms) to exercise loading/empty/error states.
-//
-// FUTURE: Replace the setTimeout block with a Notion database query:
-//   const { data, isLoading, error } = useSWR<TeamMember[]>('/api/team', fetcher);
+// Returns all ExCo members from GET /api/team plus grouping helpers.
+// department, year, email and avatarUrl are optional: members without them
+// are left out of byDepartment / byYear but still appear in `data`.
 // ─────────────────────────────────────────────────────────────────────────────
 
+interface TeamResponse {
+  members: {
+    id: string;
+    name: string;
+    role: string | null;
+    avatarUrl: string | null;
+    department: string | null;
+    year: string | null;
+    email: string | null;
+  }[];
+}
+
 export interface TeamMembersResult extends AsyncResult<TeamMember[]> {
-  /** Members grouped by department. */
+  /** Members grouped by department (members with no department are omitted). */
   byDepartment: Record<string, TeamMember[]>;
-  /** Members grouped by year label. */
+  /** Members grouped by year label (members with no year are omitted). */
   byYear: Record<string, TeamMember[]>;
   /** Quick lookup by member id. */
   byId: Record<string, TeamMember>;
 }
 
+function groupBy(members: TeamMember[], key: (m: TeamMember) => string | undefined) {
+  return members.reduce<Record<string, TeamMember[]>>((acc, m) => {
+    const k = key(m);
+    if (!k) return acc;
+    (acc[k] ??= []).push(m);
+    return acc;
+  }, {});
+}
+
 export function useTeamMembers(): TeamMembersResult {
-  const [data, setData] = useState<TeamMember[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error] = useState<Error | null>(null);
+  const { data: response, isLoading, error } = useApiResource<TeamResponse>('team');
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setData(mockTeamMembers);
-      setIsLoading(false);
-    }, 400);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const byDepartment = useMemo<Record<string, TeamMember[]>>(
+  const data = useMemo<TeamMember[]>(
     () =>
-      data.reduce<Record<string, TeamMember[]>>((acc, m) => {
-        if (!acc[m.department]) acc[m.department] = [];
-        acc[m.department].push(m);
-        return acc;
-      }, {}),
-    [data]
+      (response?.members ?? []).map((m) => ({
+        id: m.id,
+        name: m.name,
+        role: m.role ?? '',
+        department: m.department ?? undefined,
+        year: m.year ?? undefined,
+        email: m.email ?? undefined,
+        avatarUrl: m.avatarUrl ?? undefined,
+      })),
+    [response]
   );
 
-  const byYear = useMemo<Record<string, TeamMember[]>>(
-    () =>
-      data.reduce<Record<string, TeamMember[]>>((acc, m) => {
-        if (!acc[m.year]) acc[m.year] = [];
-        acc[m.year].push(m);
-        return acc;
-      }, {}),
-    [data]
-  );
-
-  const byId = useMemo<Record<string, TeamMember>>(
+  const byDepartment = useMemo(() => groupBy(data, (m) => m.department), [data]);
+  const byYear = useMemo(() => groupBy(data, (m) => m.year), [data]);
+  const byId = useMemo(
     () =>
       data.reduce<Record<string, TeamMember>>((acc, m) => {
         acc[m.id] = m;

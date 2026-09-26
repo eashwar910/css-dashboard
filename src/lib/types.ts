@@ -86,12 +86,15 @@ export interface Event {
 export interface TeamMember {
   id: string;
   name: string;
+  /** Position from Notion; empty string when not set. */
   role: string;
-  department: string;
-  /** Academic year label, e.g. "Senior", "Junior", "Year 3" */
-  year: string;
-  email: string;
-  /** Optional URL to a profile photo; falls back to initials avatar in UI. */
+  /** From api/_lib/memberDetails.ts; undefined until filled in. */
+  department?: string;
+  /** Academic year label, e.g. "Year 2". From api/_lib/memberDetails.ts. */
+  year?: string;
+  /** From Supabase committee_members; undefined when unmatched. */
+  email?: string;
+  /** Notion-hosted photo URL (expires after ~1h); falls back to initials. */
   avatarUrl?: string;
 }
 

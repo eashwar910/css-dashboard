@@ -27,3 +27,6 @@ dist-ssr
 
 # Notion survey output (contains real member data)
 notion-survey.json
+.vercel
+.env*
+!.env.example

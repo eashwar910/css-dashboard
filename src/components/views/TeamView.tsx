@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 
 function getInitials(name: string) {
@@ -195,12 +196,14 @@ export function TeamView() {
                 {/* Name + initials + role + mobile contact */}
                 <div className="flex items-center justify-between sm:justify-start gap-3 min-w-0">
                   <div className="flex items-center gap-3 min-w-0">
-                    <span
-                      aria-hidden="true"
-                      className="flex h-7 w-7 shrink-0 items-center justify-center border border-border text-[11px] font-semibold text-muted-foreground"
-                    >
-                      {getInitials(member.name)}
-                    </span>
+                    <Avatar aria-hidden="true" className="h-7 w-7 shrink-0 rounded-none border border-border">
+                      {member.avatarUrl && (
+                        <AvatarImage src={member.avatarUrl} alt="" className="object-cover" />
+                      )}
+                      <AvatarFallback className="rounded-none bg-transparent text-[11px] font-semibold text-muted-foreground">
+                        {getInitials(member.name)}
+                      </AvatarFallback>
+                    </Avatar>
                     <div className="min-w-0">
                       <p className="text-sm font-medium leading-snug truncate">{member.name}</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">{member.role}</p>
@@ -208,39 +211,53 @@ export function TeamView() {
                   </div>
 
                   {/* Mobile-only contact button */}
+                  {member.email && (
+                    <a
+                      href={`mailto:${member.email}`}
+                      className="flex sm:hidden items-center gap-1 border border-border px-2 py-1 text-xs text-primary hover:bg-muted/20"
+                      aria-label={`Email ${member.name}`}
+                    >
+                      <Mail className="h-3 w-3 shrink-0" />
+                      <span>Email</span>
+                    </a>
+                  )}
+                </div>
+
+                {/* Mobile stacked badge for year */}
+                {member.year && (
+                  <div className="flex sm:hidden items-center gap-3 text-xs text-muted-foreground pl-10">
+                    <span className="flex items-center gap-1">
+                      <GraduationCap className="h-3 w-3 shrink-0" />
+                      <span>{member.year}</span>
+                    </span>
+                  </div>
+                )}
+
+                {/* Desktop: Year (the grid cell stays so columns line up) */}
+                <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
+                  {member.year ? (
+                    <>
+                      <GraduationCap className="h-3 w-3 shrink-0" />
+                      <span>{member.year}</span>
+                    </>
+                  ) : (
+                    <span aria-label="Year not set">—</span>
+                  )}
+                </div>
+
+                {/* Desktop: Contact link */}
+                {member.email ? (
                   <a
                     href={`mailto:${member.email}`}
-                    className="flex sm:hidden items-center gap-1 border border-border px-2 py-1 text-xs text-primary hover:bg-muted/20"
+                    className="hidden sm:flex items-center gap-1.5 text-xs text-primary hover:underline"
                     aria-label={`Email ${member.name}`}
                   >
                     <Mail className="h-3 w-3 shrink-0" />
                     <span>Email</span>
                   </a>
-                </div>
-
-                {/* Mobile stacked badge for year */}
-                <div className="flex sm:hidden items-center gap-3 text-xs text-muted-foreground pl-10">
-                  <span className="flex items-center gap-1">
-                    <GraduationCap className="h-3 w-3 shrink-0" />
-                    <span>{member.year}</span>
-                  </span>
-                </div>
-
-                {/* Desktop: Year */}
-                <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <GraduationCap className="h-3 w-3 shrink-0" />
-                  <span>{member.year}</span>
-                </div>
-
-                {/* Desktop: Contact link */}
-                <a
-                  href={`mailto:${member.email}`}
-                  className="hidden sm:flex items-center gap-1.5 text-xs text-primary hover:underline"
-                  aria-label={`Email ${member.name}`}
-                >
-                  <Mail className="h-3 w-3 shrink-0" />
-                  <span>Email</span>
-                </a>
+                ) : (
+                  <span className="hidden sm:block text-xs text-muted-foreground" aria-label="No email on file">—</span>
+                )}
               </div>
             ))}
           </div>
