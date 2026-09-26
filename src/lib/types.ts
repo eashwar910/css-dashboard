@@ -2,12 +2,11 @@
 // Canonical domain types for the CS Society dashboard.
 //
 // These interfaces are the single source of truth used by:
-//   - mock data files  (src/data/)
-//   - data-access hooks (src/hooks/)
+//   - data-access hooks (src/hooks/), which map /api/* responses into them
 //   - UI view components
 //
-// When real Notion API calls replace the mocks, only the hook implementations
-// change — these interfaces and the components that use them stay the same.
+// The /api functions read Notion (see NOTION_MAPPING.md and docs/PLAN.md);
+// hooks translate their responses so components never see Notion shapes.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Task ─────────────────────────────────────────────────────────────────────
@@ -21,10 +20,16 @@ export interface Task {
   status: TaskStatus;
   /** Convenience accessor derived from status === 'done'. */
   completed: boolean;
-  /** Project or category tag shown as a label next to the task title. */
-  project: string;
-  /** ISO-8601 date string, e.g. "2026-09-24" */
-  dueDate: string;
+  /** Linked event's name, shown as a label next to the title. Undefined (hidden) when there's no event. */
+  project?: string;
+  /** ISO-8601 date or datetime from Notion `Due Date`. Undefined when unset. */
+  dueDate?: string;
+  /** Linked Team Dashboard > Events page ids. */
+  eventIds: string[];
+  /** The signed-in member is a PIC on this task. */
+  mine: boolean;
+  /** Included in the weekly scrum view (mine; not Done, or Done this week). */
+  weekly: boolean;
 }
 
 // ── Event ────────────────────────────────────────────────────────────────────

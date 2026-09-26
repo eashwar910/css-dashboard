@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useSyncExternalStore, useCallback } from 'react';
 import { isSameMonth } from 'date-fns';
 import type { AsyncResult, Event, EventCategory, EventStatus } from '@/lib/types';
-import { apiFetch } from '@/lib/api';
+import { createApiStore } from '@/lib/apiStore';
 import { compareEvents, eventStart, isTba, isUpcoming } from '@/lib/eventDates';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -27,35 +27,6 @@ interface EventsResponse {
   }[];
 }
 
-interface EventsState {
-  events: Event[];
-  isLoading: boolean;
-  error: Error | null;
-  loadedAt: number;
-}
-
-const RELOAD_AFTER_MS = 60_000;
-
-let state: EventsState = { events: [], isLoading: true, error: null, loadedAt: 0 };
-let inflight: Promise<void> | null = null;
-const listeners = new Set<() => void>();
-
-function setState(patch: Partial<EventsState>) {
-  state = { ...state, ...patch };
-  for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-function getSnapshot(): EventsState {
-  return state;
-}
-
 function toEvent(dto: EventsResponse['events'][number]): Event {
   return {
     id: dto.id,
@@ -76,19 +47,7 @@ function toEvent(dto: EventsResponse['events'][number]): Event {
   };
 }
 
-function loadEvents(): Promise<void> {
-  inflight ??= apiFetch<EventsResponse>('events')
-    .then((res) => setState({ events: res.events.map(toEvent), error: null, loadedAt: Date.now() }))
-    .catch((err: unknown) => {
-      console.error('Failed to load /api/events', err);
-      setState({ error: err instanceof Error ? err : new Error(String(err)) });
-    })
-    .finally(() => {
-      inflight = null;
-      setState({ isLoading: false });
-    });
-  return inflight;
-}
+const store = createApiStore<EventsResponse, Event[]>('events', (res) => res.events.map(toEvent), []);
 
 export interface EventsResult extends AsyncResult<Event[]> {
   /** Dated events and meetings that aren't over yet (sorted ascending). */
@@ -112,30 +71,30 @@ export interface EventsResult extends AsyncResult<Event[]> {
 }
 
 export function useEvents(): EventsResult {
-  const { events: rawData, isLoading, error } = useSyncExternalStore(subscribe, getSnapshot);
+  const { value: rawData, isLoading, error } = useSyncExternalStore(store.subscribe, store.getSnapshot);
 
   useEffect(() => {
-    if (Date.now() - state.loadedAt > RELOAD_AFTER_MS) void loadEvents();
+    store.ensureFresh();
   }, []);
 
   const data = useMemo(() => [...rawData].sort(compareEvents), [rawData]);
 
   const addEvent = useCallback((newEvent: Omit<Event, 'id'> & { id?: string }): Event => {
     const event: Event = { ...newEvent, id: newEvent.id || `evt-${Date.now()}` };
-    setState({ events: [event, ...state.events] });
+    store.update((events) => [event, ...events]);
     return event;
   }, []);
 
   const rsvpEvent = useCallback((id: string) => {
-    setState({ events: state.events.map((e) => (e.id === id ? { ...e, rsvpCount: (e.rsvpCount || 0) + 1 } : e)) });
+    store.update((events) => events.map((e) => (e.id === id ? { ...e, rsvpCount: (e.rsvpCount || 0) + 1 } : e)));
   }, []);
 
   const removeEvent = useCallback((id: string) => {
-    setState({ events: state.events.filter((e) => e.id !== id) });
+    store.update((events) => events.filter((e) => e.id !== id));
   }, []);
 
   const updateEvent = useCallback((id: string, patch: Partial<Event>) => {
-    setState({ events: state.events.map((e) => (e.id === id ? { ...e, ...patch } : e)) });
+    store.update((events) => events.map((e) => (e.id === id ? { ...e, ...patch } : e)));
   }, []);
 
   const upcoming = useMemo(() => data.filter((e) => isUpcoming(e)), [data]);

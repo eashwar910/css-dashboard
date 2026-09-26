@@ -19,3 +19,11 @@ export const EVENT_FEATURES = {
    */
   editing: false,
 } as const;
+
+export const TASK_FEATURES = {
+  /**
+   * Add / delete to-dos from the event dialog. Off until task writes exist
+   * (docs/PLAN.md step 7); ticking is local-only until then.
+   */
+  editing: false,
+} as const;

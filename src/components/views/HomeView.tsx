@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { format, parseISO } from 'date-fns';
+import { useState, useMemo } from 'react';
+import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -47,11 +47,17 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import type { Task, Event } from '@/lib/types';
+import type { Event } from '@/lib/types';
 import type { View } from '@/components/Sidebar';
 import { EVENT_FEATURES } from '@/lib/features';
 import { TbaTag } from '@/components/TbaTag';
-import { eventKindLabel, formatEventDate, formatEventTimeRange, isTba } from '@/lib/eventDates';
+import { eventKindLabel, formatEventDate, formatEventTimeRange, isTba, parseDate } from '@/lib/eventDates';
+
+/** "Due Sep 30", or "No due date". */
+function formatDueDate(dueDate: string | undefined) {
+  const due = parseDate(dueDate);
+  return due ? `Due ${format(due, 'MMM d')}` : 'No due date';
+}
 import { useTasks } from '@/hooks/useTasks';
 import { useEvents } from '@/hooks/useEvents';
 import { useDocuments } from '@/hooks/useDocuments';
@@ -102,7 +108,14 @@ export interface HomeViewProps {
 }
 
 export function HomeView({ onNavigate }: HomeViewProps = {}) {
-  const { data: allTasks, isLoading: tasksLoading, error: tasksError } = useTasks();
+  const {
+    weekly: tasks,
+    weeklyGroups,
+    notionLinked,
+    toggleTask,
+    isLoading: tasksLoading,
+    error: tasksError,
+  } = useTasks();
   const { upcoming: upcomingEvents, tba: tbaEvents, data: allEvents, isLoading: eventsLoading, error: eventsError, removeEvent } = useEvents();
   const { data: documents, isLoading: docsLoading, error: docsError } = useDocuments();
   const { data: teamMembers } = useTeamMembers();
@@ -114,24 +127,6 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
   const { toast } = useToast();
-
-  // Local optimistic toggle state — seeded from hook data
-  const [tasks, setTasks] = useState<Task[]>(allTasks);
-
-  // Synchronize local tasks state once async data resolves
-  useEffect(() => {
-    setTasks(allTasks);
-  }, [allTasks]);
-
-  const toggleTask = (id: string) => {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === id
-          ? { ...t, completed: !t.completed, status: !t.completed ? 'done' : 'todo' }
-          : t
-      )
-    );
-  };
 
   const completedCount = useMemo(() => tasks.filter((t) => t.completed).length, [tasks]);
 
@@ -523,12 +518,19 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
               </div>
             ) : tasks.length === 0 ? (
               <p className="py-6 text-xs text-muted-foreground">
-                No tasks for this week. All caught up!
+                {notionLinked
+                  ? 'No tasks for this week. All caught up!'
+                  : "Your login email doesn't match a Notion account, so your tasks can't be found yet. Ask an admin to set your Notion email."}
               </p>
             ) : (
               <ScrollArea className="h-[340px] scrollbar-thin">
+                {weeklyGroups.map((group) => (
+                <div key={group.eventId ?? 'general'} className="mb-2">
+                <h3 className="pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {group.name}
+                </h3>
                 <ul className="divide-y divide-border">
-                  {tasks.map((task) => (
+                  {group.tasks.map((task) => (
                     <li key={task.id}>
                       <label className="flex cursor-pointer items-start gap-3 py-3 transition-colors hover:text-primary">
                         <Checkbox
@@ -553,15 +555,15 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
                             ) : (
                               <Circle className="h-3 w-3 shrink-0" />
                             )}
-                            <span>Due {format(parseISO(task.dueDate), 'MMM d')}</span>
-                            <span className="text-muted-foreground/60">·</span>
-                            <span>{task.project}</span>
+                            <span>{formatDueDate(task.dueDate)}</span>
                           </p>
                         </div>
                       </label>
                     </li>
                   ))}
                 </ul>
+                </div>
+                ))}
               </ScrollArea>
             )}
           </section>

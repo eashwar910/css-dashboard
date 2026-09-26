@@ -69,7 +69,8 @@ import {
 } from 'lucide-react';
 import type { Event, EventCategory, AgendaItem, EventStatus, EventTodoItem, FinanceItem } from '@/lib/types';
 import { useEvents } from '@/hooks/useEvents';
-import { EVENT_FEATURES } from '@/lib/features';
+import { EVENT_FEATURES, TASK_FEATURES } from '@/lib/features';
+import { useTasks } from '@/hooks/useTasks';
 import { TbaTag } from '@/components/TbaTag';
 import {
   eventEnd,
@@ -978,7 +979,7 @@ export function CalendarView() {
 
               {/* ── TO-DO TAB ── */}
               {eventDetailTab === 'todo' && (
-                <EventTodoPanel event={activeSelectedEvent} onUpdate={(patch) => updateEvent(activeSelectedEvent.id, patch)} />
+                <EventTodoPanel eventId={activeSelectedEvent.id} />
               )}
 
               {/* ── FINANCE REPORTS TAB ── */}
@@ -1099,34 +1100,17 @@ export function CalendarView() {
 // EventTodoPanel — per-event to-do list
 // ─────────────────────────────────────────────────────────────────────────────
 
-function EventTodoPanel({
-  event,
-  onUpdate,
-}: {
-  event: Event;
-  onUpdate: (patch: Partial<Event>) => void;
-}) {
+function EventTodoPanel({ eventId }: { eventId: string }) {
   const [newText, setNewText] = useState('');
-  const todos: EventTodoItem[] = event.todos ?? [];
+  const { forEvent, toggleTask, isLoading, error } = useTasks();
+  // The event's to-dos are the Notion Tasks linked to it.
+  const todos: EventTodoItem[] = forEvent(eventId).map((t) => ({ id: t.id, text: t.title, completed: t.completed }));
 
-  const addTodo = () => {
-    const text = newText.trim();
-    if (!text) return;
-    onUpdate({
-      todos: [...todos, { id: `todo-${Date.now()}`, text, completed: false }],
-    });
-    setNewText('');
-  };
-
-  const toggleTodo = (id: string) => {
-    onUpdate({
-      todos: todos.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)),
-    });
-  };
-
-  const deleteTodo = (id: string) => {
-    onUpdate({ todos: todos.filter((t) => t.id !== id) });
-  };
+  // Ticking is local-only for now. Adding and deleting need task writes
+  // (docs/PLAN.md step 7), so their controls are hidden via TASK_FEATURES.
+  const toggleTodo = (id: string) => toggleTask(id);
+  const addTodo: () => void = () => {};
+  const deleteTodo: (id: string) => void = () => {};
 
   return (
     <div className="space-y-4">
@@ -1136,6 +1120,7 @@ function EventTodoPanel({
       </h4>
 
       {/* Add new todo */}
+      {TASK_FEATURES.editing && (
       <div className="flex gap-2">
         <input
           type="text"
@@ -1155,10 +1140,15 @@ function EventTodoPanel({
           Add
         </button>
       </div>
+      )}
 
       {/* Todo list */}
-      {todos.length === 0 ? (
-        <p className="text-xs text-muted-foreground italic">No tasks yet. Add one above.</p>
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground">Loading tasks…</p>
+      ) : error ? (
+        <p className="text-xs text-destructive">Couldn&apos;t load tasks — try refreshing.</p>
+      ) : todos.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic">No tasks are linked to this event in Notion yet.</p>
       ) : (
         <div className="divide-y divide-border">
           {todos.map((todo) => (
@@ -1178,13 +1168,15 @@ function EventTodoPanel({
               <span className={cn('flex-1 text-xs', todo.completed && 'line-through text-muted-foreground')}>
                 {todo.text}
               </span>
-              <button
-                type="button"
-                onClick={() => deleteTodo(todo.id)}
-                className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-destructive transition-all"
-              >
-                <XIcon className="h-3 w-3" />
-              </button>
+              {TASK_FEATURES.editing && (
+                <button
+                  type="button"
+                  onClick={() => deleteTodo(todo.id)}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-destructive transition-all"
+                >
+                  <XIcon className="h-3 w-3" />
+                </button>
+              )}
             </div>
           ))}
         </div>
