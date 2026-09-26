@@ -8,7 +8,7 @@ import { people } from './props.js';
 export type TaskAction = 'toggle' | 'edit' | 'delete';
 
 export type OwnershipReason =
-  | 'admin' // role = admin: always allowed
+  | 'admin' // committee_members.is_admin: always allowed
   | 'pic' // the member is one of the task's PIC people
   | 'unassigned-toggle' // no individual PIC; anyone may tick/untick
   | 'unassigned-admin-only' // no individual PIC; edit/delete needs admin

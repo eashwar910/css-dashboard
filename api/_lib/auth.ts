@@ -12,9 +12,11 @@ import { sendError } from './http.js';
 export interface CommitteeMember {
   /** Login email from the Supabase session, lowercased. */
   email: string;
+  /** Job title only; it grants no permissions. */
   role: string | null;
   /** committee_members.notion_email, if that column exists and is set. */
   notionEmail: string | null;
+  /** committee_members.is_admin. */
   isAdmin: boolean;
 }
 
@@ -72,5 +74,5 @@ export async function requireCommittee(req: VercelRequest, res: VercelResponse):
   const notionEmail =
     typeof row.notion_email === 'string' && row.notion_email.trim() ? row.notion_email.trim().toLowerCase() : null;
 
-  return { email: loginEmail, role, notionEmail, isAdmin: role?.toLowerCase() === 'admin' };
+  return { email: loginEmail, role, notionEmail, isAdmin: row.is_admin === true };
 }
