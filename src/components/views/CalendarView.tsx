@@ -749,15 +749,17 @@ export function CalendarView() {
                 <DialogTitle className="font-serif text-2xl font-semibold text-foreground">
                   {activeSelectedEvent.title}
                 </DialogTitle>
-                <button
-                  type="button"
-                  onClick={() => {
-                    toast({ title: 'EPF', description: `Opening Event Planning Form for "${activeSelectedEvent.title}"` });
-                  }}
-                  className="shrink-0 border border-border px-3 py-1 text-[11px] font-semibold tracking-wider uppercase text-foreground hover:border-primary hover:text-primary transition-colors"
-                >
-                  EPF
-                </button>
+                {EVENT_FEATURES.epf && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toast({ title: 'EPF', description: `Opening Event Planning Form for "${activeSelectedEvent.title}"` });
+                    }}
+                    className="shrink-0 border border-border px-3 py-1 text-[11px] font-semibold tracking-wider uppercase text-foreground hover:border-primary hover:text-primary transition-colors"
+                  >
+                    EPF
+                  </button>
+                )}
               </div>
 
               {/* Date row with edit toggle */}

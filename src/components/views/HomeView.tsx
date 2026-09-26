@@ -85,7 +85,8 @@ interface Announcement {
   content: string;
 }
 
-const mockAnnouncements: Announcement[] = [
+// Hard-coded on purpose: there is no Notion source for announcements yet.
+const announcements: Announcement[] = [
   {
     id: 'ann-1',
     title: 'Lab 2B Access PIN Updated',
@@ -127,7 +128,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
   // Search input state
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Selected event for detail navigation stub
+  // Event shown in the detail dialog
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
   const { toast } = useToast();
@@ -651,7 +652,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
             </div>
 
             <div className="divide-y divide-border">
-              {mockAnnouncements.map((notice) => (
+              {announcements.map((notice) => (
                 <article key={notice.id} className="py-3">
                   <h3 className="text-sm font-medium text-foreground">
                     {notice.title}
@@ -668,7 +669,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
 
       </div>
 
-      {/* ── Event Detail Stub Dialog ─────────────────────────────────── */}
+      {/* ── Event Detail Dialog ──────────────────────────────────────── */}
       <Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
         <DialogContent style={{ borderRadius: 0 }} className="border-border">
           <DialogHeader>
@@ -677,9 +678,6 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
                 {selectedEvent && eventKindLabel(selectedEvent)}
               </Badge>
               {selectedEvent && isTba(selectedEvent) && <TbaTag />}
-              <span className="font-mono text-xs text-muted-foreground">
-                /events/{selectedEvent?.id} (Route stub)
-              </span>
             </div>
             <DialogTitle className="font-serif text-xl mt-2">
               {selectedEvent?.title}

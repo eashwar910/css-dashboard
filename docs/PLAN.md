@@ -128,7 +128,11 @@ Every ringgit in or out is one row. Exact property names and options are in `NOT
 7. ~~Task writes: tick/untick, create, edit, delete, with the ownership rules.~~ **Done** (`/api/tasks` POST/PATCH/DELETE).
 8. ~~Finance: read and write for Transactions, including reimbursement status.~~ **Done** (`/api/finance`; Finance page in the sidebar; event dialog Finance tab).
 9. Supabase: add the nullable `notion_email` column to `committee_members`. The SQL comes from the agent in step 2; the owner runs it.
-10. Final sweep: remove leftover mock arrays and artificial delays, and list anything still hard-coded.
+10. ~~Final sweep: remove leftover mock arrays and artificial delays, and list anything still hard-coded.~~ **Done.** Still hard-coded on purpose:
+    - Home announcements (`HomeView.tsx`, no Notion source).
+    - Member department/year (`api/_lib/memberDetails.ts`, filled in by hand).
+    - UI option lists: task statuses and event status labels.
+    - Switched off in `src/lib/features.ts`: event agenda, RSVP, description, event editing (add/delete/dates/status), and the EPF button.
 11. Deploy: add all env vars to Vercel, redeploy, then test with two different committee accounts (own vs other people's to-dos, finance entries).
 
 Work one section at a time, test with `vercel dev`, and show the result to the owner before moving on. Don't commit unless asked.
