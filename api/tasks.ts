@@ -7,8 +7,9 @@
 
 import { requireCommittee } from './_lib/auth.js';
 import { HttpError, jsonBody, pageIdParam, sendJson, withHandler } from './_lib/http.js';
-import { createTask, deleteTask, editTask, notionUserIdFor, setTaskCompleted } from './_lib/taskWrites.js';
+import { createTask, deleteTask, editTask, setTaskCompleted } from './_lib/taskWrites.js';
 import { loadTasks } from './_lib/tasks.js';
+import { notionUserIdFor } from './_lib/users.js';
 
 export default withHandler(
   ['GET', 'POST', 'PATCH', 'DELETE'],

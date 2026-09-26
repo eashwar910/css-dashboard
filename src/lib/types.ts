@@ -162,3 +162,60 @@ export interface AsyncResult<T> {
   isLoading: boolean;
   error: Error | null;
 }
+
+// ── Finance (Finance Tracker > Transactions) ─────────────────────────────────
+
+export type TransactionType = 'Income' | 'Expense';
+export type PaidBy = 'Society Account' | 'Member';
+export type ReimbursementStatus = 'Pending' | 'Approved' | 'Paid Back';
+
+export interface Transaction {
+  id: string;
+  description: string;
+  type: TransactionType | null;
+  /** Ringgit (RM). */
+  amount: number | null;
+  /** ISO date. */
+  date: string | null;
+  /** Linked Team Dashboard > Events page id. */
+  eventId: string | null;
+  category: string | null;
+  paidBy: PaidBy | null;
+  claimant: { id: string; name: string | null } | null;
+  reimbursementStatus: ReimbursementStatus | null;
+  recordedBy: string | null;
+  receiptCount: number;
+  /** Notion page (receipts are viewed there). */
+  url: string;
+}
+
+export interface FinanceTotals {
+  income: number;
+  spending: number;
+  /** income − spending */
+  balance: number;
+  /** Paid By = Member and not Paid Back. */
+  outstanding: number;
+  count: number;
+}
+
+export interface FinanceOptions {
+  types: TransactionType[];
+  categories: string[];
+  paidBy: PaidBy[];
+  reimbursementStatuses: ReimbursementStatus[];
+}
+
+export interface TransactionInput {
+  description: string;
+  type: TransactionType;
+  amount: number;
+  /** YYYY-MM-DD; defaults to today (Kuala Lumpur). */
+  date?: string;
+  eventId?: string | null;
+  category?: string | null;
+  paidBy?: PaidBy;
+  /** Login email of the member being reimbursed (Paid By = Member only). */
+  claimantEmail?: string;
+  reimbursementStatus?: ReimbursementStatus;
+}

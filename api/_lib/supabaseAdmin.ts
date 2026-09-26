@@ -27,6 +27,25 @@ export function normaliseName(name: string): string {
 }
 
 /**
+ * committee_members login email (lowercased) → notion_email, for members
+ * whose Notion account uses a different email. Cached 60s. null without the key.
+ */
+export async function committeeNotionEmails(): Promise<Map<string, string> | null> {
+  const client = supabaseAdmin();
+  if (!client) return null;
+  return cached('supabase:committeeNotionEmails', async () => {
+    const { data, error } = await client.from('committee_members').select('*');
+    if (error) throw new Error(`committee_members read failed: ${error.message}`);
+    const map = new Map<string, string>();
+    for (const row of data ?? []) {
+      const notionEmail = typeof row.notion_email === 'string' ? row.notion_email.trim().toLowerCase() : '';
+      if (typeof row.email === 'string' && notionEmail) map.set(row.email.trim().toLowerCase(), notionEmail);
+    }
+    return map;
+  });
+}
+
+/**
  * committee_members.full_name (normalised) → email. Cached 60s.
  * Returns null when the service-role key isn't configured.
  */

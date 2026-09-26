@@ -63,14 +63,14 @@ import {
   X as XIcon,
   DollarSign,
   CheckSquare,
-  TrendingUp,
-  TrendingDown,
   ExternalLink,
 } from 'lucide-react';
-import type { Event, EventCategory, AgendaItem, EventStatus, EventTodoItem, FinanceItem, Task } from '@/lib/types';
+import type { Event, EventCategory, AgendaItem, EventStatus, EventTodoItem, Task } from '@/lib/types';
 import { useEvents } from '@/hooks/useEvents';
 import { EVENT_FEATURES } from '@/lib/features';
 import { TaskEditDialog } from '@/components/TaskEditDialog';
+import { useFinance } from '@/hooks/useFinance';
+import { AddTransactionForm, FinanceSummary, TransactionList } from '@/components/finance/FinanceParts';
 import { useTasks } from '@/hooks/useTasks';
 import { TbaTag } from '@/components/TbaTag';
 import {
@@ -985,7 +985,7 @@ export function CalendarView() {
 
               {/* ── FINANCE REPORTS TAB ── */}
               {eventDetailTab === 'finance' && (
-                <EventFinancePanel event={activeSelectedEvent} onUpdate={(patch) => updateEvent(activeSelectedEvent.id, patch)} />
+                <EventFinancePanel eventId={activeSelectedEvent.id} />
               )}
             </div>
 
@@ -1238,36 +1238,9 @@ function EventTodoPanel({ eventId }: { eventId: string }) {
 // EventFinancePanel — per-event finance / budget tracker
 // ─────────────────────────────────────────────────────────────────────────────
 
-function EventFinancePanel({
-  event,
-  onUpdate,
-}: {
-  event: Event;
-  onUpdate: (patch: Partial<Event>) => void;
-}) {
-  const [desc, setDesc] = useState('');
-  const [amount, setAmount] = useState('');
-  const [type, setType] = useState<'income' | 'expense'>('expense');
-  const items: FinanceItem[] = event.financeItems ?? [];
-
-  const addItem = () => {
-    const d = desc.trim();
-    const a = parseFloat(amount);
-    if (!d || isNaN(a) || a <= 0) return;
-    onUpdate({
-      financeItems: [...items, { id: `fi-${Date.now()}`, description: d, amount: a, type }],
-    });
-    setDesc('');
-    setAmount('');
-  };
-
-  const deleteItem = (id: string) => {
-    onUpdate({ financeItems: items.filter((i) => i.id !== id) });
-  };
-
-  const totalIncome = items.filter((i) => i.type === 'income').reduce((s, i) => s + i.amount, 0);
-  const totalExpense = items.filter((i) => i.type === 'expense').reduce((s, i) => s + i.amount, 0);
-  const net = totalIncome - totalExpense;
+function EventFinancePanel({ eventId }: { eventId: string }) {
+  const { forEvent, totalsForEvent, isLoading, error } = useFinance();
+  const transactions = forEvent(eventId);
 
   return (
     <div className="space-y-4">
@@ -1276,102 +1249,16 @@ function EventFinancePanel({
         Finance Report
       </h4>
 
-      {/* Summary pills */}
-      {items.length > 0 && (
-        <div className="flex flex-wrap gap-3 text-xs">
-          <div className="flex items-center gap-1.5 border border-emerald-500/40 px-3 py-1.5 text-emerald-600">
-            <TrendingUp className="h-3 w-3" />
-            <span>Income: <strong>£{totalIncome.toFixed(2)}</strong></span>
-          </div>
-          <div className="flex items-center gap-1.5 border border-destructive/40 px-3 py-1.5 text-destructive">
-            <TrendingDown className="h-3 w-3" />
-            <span>Expenses: <strong>£{totalExpense.toFixed(2)}</strong></span>
-          </div>
-          <div className={cn(
-            'flex items-center gap-1.5 border px-3 py-1.5 font-semibold',
-            net >= 0 ? 'border-emerald-500/40 text-emerald-600' : 'border-destructive/40 text-destructive'
-          )}>
-            Net: £{net.toFixed(2)}
-          </div>
-        </div>
-      )}
-
-      {/* Add new finance item */}
-      <div className="flex flex-wrap gap-2">
-        <input
-          type="text"
-          value={desc}
-          onChange={(e) => setDesc(e.target.value)}
-          placeholder="Description..."
-          className="flex-1 min-w-[120px] border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
-          style={{ borderRadius: 0 }}
-        />
-        <input
-          type="number"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="Amount £"
-          min="0"
-          step="0.01"
-          className="w-28 border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
-          style={{ borderRadius: 0 }}
-        />
-        <div className="flex border border-border text-xs">
-          <button
-            type="button"
-            onClick={() => setType('income')}
-            className={cn(
-              'px-3 py-1.5 font-medium transition-colors',
-              type === 'income' ? 'bg-emerald-500 text-white' : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            Income
-          </button>
-          <button
-            type="button"
-            onClick={() => setType('expense')}
-            className={cn(
-              'px-3 py-1.5 font-medium transition-colors border-l border-border',
-              type === 'expense' ? 'bg-destructive text-destructive-foreground' : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            Expense
-          </button>
-        </div>
-        <button
-          type="button"
-          onClick={addItem}
-          className="border border-border px-3 py-1.5 text-xs text-foreground hover:border-primary hover:text-primary transition-colors flex items-center gap-1"
-        >
-          <Plus className="h-3 w-3" />
-          Add
-        </button>
-      </div>
-
-      {/* Finance items list */}
-      {items.length === 0 ? (
-        <p className="text-xs text-muted-foreground italic">No entries yet. Add income or expense above.</p>
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground">Loading transactions…</p>
+      ) : error ? (
+        <p className="text-xs text-destructive">Couldn&apos;t load finance — try refreshing.</p>
       ) : (
-        <div className="divide-y divide-border">
-          {items.map((item) => (
-            <div key={item.id} className="flex items-center gap-3 py-2.5 group">
-              <span className={cn('text-xs shrink-0', item.type === 'income' ? 'text-emerald-600' : 'text-destructive')}>
-                {item.type === 'income' ? '+' : '–'}
-              </span>
-              <span className="flex-1 text-xs text-foreground">{item.description}</span>
-              <span className={cn('text-xs font-semibold shrink-0', item.type === 'income' ? 'text-emerald-600' : 'text-destructive')}>
-                £{item.amount.toFixed(2)}
-              </span>
-              <button
-                type="button"
-                onClick={() => deleteItem(item.id)}
-                className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-destructive transition-all"
-              >
-                <XIcon className="h-3 w-3" />
-              </button>
-            </div>
-          ))}
-        </div>
+        <>
+          {transactions.length > 0 && <FinanceSummary totals={totalsForEvent(eventId)} />}
+          <AddTransactionForm eventId={eventId} />
+          <TransactionList transactions={transactions} emptyText="No transactions for this event yet. Add income or an expense above." />
+        </>
       )}
     </div>
   );

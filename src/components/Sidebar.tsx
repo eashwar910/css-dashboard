@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
-import { Code2, Home, CalendarDays, Users, Menu, X, LogOut } from 'lucide-react';
+import { Code2, Home, CalendarDays, Users, Wallet, Menu, X, LogOut } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
-export type View = 'home' | 'calendar' | 'team';
+export type View = 'home' | 'calendar' | 'team' | 'finance';
 
 interface SidebarProps {
   currentView: View;
@@ -16,6 +16,7 @@ const navItems: { id: View; label: string; icon: typeof Home }[] = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'calendar', label: 'Calendar & Events', icon: CalendarDays },
   { id: 'team', label: 'Team Directory', icon: Users },
+  { id: 'finance', label: 'Finance', icon: Wallet },
 ];
 
 function SidebarContent({

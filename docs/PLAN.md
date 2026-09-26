@@ -111,6 +111,8 @@ Every ringgit in or out is one row. Exact property names and options are in `NOT
 - A reimbursement is an Expense row with Paid By = Member, so each expense is counted exactly once.
 - The dashboard shows income, spending, balance, and outstanding reimbursements, per event and overall. Outstanding means Paid By = Member and status not Paid Back.
 - Permissions: any committee member can add entries and change reimbursement status for now. This may be restricted to admin/treasurer later.
+- Validation (server): Type required; Amount > 0; Claimant and Reimbursement Status only when Paid By = Member; Paid By = Member only for expenses. A Member-paid expense defaults to Pending, and to the creator as Claimant if none is picked. Paid By defaults to Society Account. Date defaults to today (Kuala Lumpur).
+- Receipts: shown as a link to the transaction's Notion page (no upload yet).
 - The one existing row in Transactions is a test row. It can be deleted once finance works.
 
 ## Still hard-coded
@@ -124,7 +126,7 @@ Every ringgit in or out is one row. Exact property names and options are in `NOT
 5. ~~Events and Meetings (read), including the TBA tag, `kind`, and optional status and dates.~~ **Done.**
 6. ~~Tasks and weekly scrum (read).~~ **Done** (ticking is local-only until step 7).
 7. ~~Task writes: tick/untick, create, edit, delete, with the ownership rules.~~ **Done** (`/api/tasks` POST/PATCH/DELETE).
-8. Finance: read and write for Transactions, including reimbursement status.
+8. ~~Finance: read and write for Transactions, including reimbursement status.~~ **Done** (`/api/finance`; Finance page in the sidebar; event dialog Finance tab).
 9. Supabase: add the nullable `notion_email` column to `committee_members`. The SQL comes from the agent in step 2; the owner runs it.
 10. Final sweep: remove leftover mock arrays and artificial delays, and list anything still hard-coded.
 11. Deploy: add all env vars to Vercel, redeploy, then test with two different committee accounts (own vs other people's to-dos, finance entries).

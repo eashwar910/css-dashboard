@@ -8,7 +8,7 @@ import { cacheInvalidate, dataSourceId, notion, retrievePageIn } from './notion.
 import { canModifyTask, type TaskAction } from './ownership.js';
 import { write } from './props.js';
 import { taskContext, toTask, type TaskDto, type TaskStatusDto } from './tasks.js';
-import { getNotionUserIdByEmail } from './users.js';
+import { notionUserIdFor } from './users.js';
 
 /** Dashboard status → exact Notion `Status` option (NOTION_MAPPING.md). */
 const NOTION_STATUS: Record<TaskStatusDto, string> = {
@@ -57,11 +57,6 @@ async function authorise(member: CommitteeMember, taskId: string, action: TaskAc
   const decision = canModifyTask(member, page, action);
   if (!decision.allowed) throw new HttpError(403, decision.message, { reason: decision.reason });
   return page;
-}
-
-/** The member's Notion user id: notion_email first, then login email. */
-export async function notionUserIdFor(member: Pick<CommitteeMember, 'email' | 'notionEmail'>): Promise<string | null> {
-  return (await getNotionUserIdByEmail(member.notionEmail)) ?? (await getNotionUserIdByEmail(member.email));
 }
 
 async function toDto(member: CommitteeMember, pageId: string): Promise<TaskDto> {

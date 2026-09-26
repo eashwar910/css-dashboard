@@ -5,6 +5,7 @@ import { Sidebar, type View } from '@/components/Sidebar';
 import { HomeView } from '@/components/views/HomeView';
 import { CalendarView } from '@/components/views/CalendarView';
 import { TeamView } from '@/components/views/TeamView';
+import { FinanceView } from '@/components/views/FinanceView';
 import { Sun, Moon } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/components/AuthProvider';
@@ -42,6 +43,7 @@ function Dashboard() {
           {view === 'home' && <HomeView onNavigate={setView} />}
           {view === 'calendar' && <CalendarView />}
           {view === 'team' && <TeamView />}
+          {view === 'finance' && <FinanceView />}
         </div>
       </main>
     </div>

@@ -2,7 +2,7 @@
 
 import { requireCommittee } from './_lib/auth.js';
 import { sendJson, withHandler } from './_lib/http.js';
-import { getNotionUserIdByEmail } from './_lib/users.js';
+import { notionUserIdFor } from './_lib/users.js';
 
 export default withHandler(
   ['GET'],
@@ -10,8 +10,7 @@ export default withHandler(
     const member = await requireCommittee(req, res);
     if (!member) return;
 
-    const notionUserId =
-      (await getNotionUserIdByEmail(member.notionEmail)) ?? (await getNotionUserIdByEmail(member.email));
+    const notionUserId = await notionUserIdFor(member);
 
     sendJson(res, 200, { email: member.email, role: member.role, isAdmin: member.isAdmin, notionUserId });
   },
