@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { format, parseISO, compareAsc } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -49,6 +49,9 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import type { Task, Event } from '@/lib/types';
 import type { View } from '@/components/Sidebar';
+import { EVENT_FEATURES } from '@/lib/features';
+import { TbaTag } from '@/components/TbaTag';
+import { eventKindLabel, formatEventDate, formatEventTimeRange, isTba } from '@/lib/eventDates';
 import { useTasks } from '@/hooks/useTasks';
 import { useEvents } from '@/hooks/useEvents';
 import { useDocuments } from '@/hooks/useDocuments';
@@ -100,7 +103,7 @@ export interface HomeViewProps {
 
 export function HomeView({ onNavigate }: HomeViewProps = {}) {
   const { data: allTasks, isLoading: tasksLoading, error: tasksError } = useTasks();
-  const { upcoming: upcomingEvents, data: allEvents, isLoading: eventsLoading, error: eventsError, removeEvent } = useEvents();
+  const { upcoming: upcomingEvents, tba: tbaEvents, data: allEvents, isLoading: eventsLoading, error: eventsError, removeEvent } = useEvents();
   const { data: documents, isLoading: docsLoading, error: docsError } = useDocuments();
   const { data: teamMembers } = useTeamMembers();
 
@@ -132,12 +135,12 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
 
   const completedCount = useMemo(() => tasks.filter((t) => t.completed).length, [tasks]);
 
-  // Upcoming events sorted ascending by startDateTime
-  const sortedUpcomingEvents = useMemo(() => {
-    return [...upcomingEvents].sort((a, b) =>
-      compareAsc(parseISO(a.startDateTime), parseISO(b.startDateTime))
-    );
-  }, [upcomingEvents]);
+  // Dated upcoming events/meetings (already sorted), then events with no date
+  // yet that aren't done. Most events are TBA, so they're shown here too.
+  const sortedUpcomingEvents = useMemo(
+    () => [...upcomingEvents, ...tbaEvents.filter((e) => e.kind === 'event' && e.status !== 'done')],
+    [upcomingEvents, tbaEvents]
+  );
 
   // Search filtering across events, documents, and members
   const searchResults = useMemo(() => {
@@ -253,7 +256,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
                             {e.title}
                           </p>
                           <p className="text-[11px] text-muted-foreground mt-0.5">
-                            {format(parseISO(e.startDateTime), 'MMM d')} · {e.location || 'Location TBA'}
+                            {formatEventDate(e, 'MMM d')} · {e.location || 'Location TBA'}
                           </p>
                         </button>
                       </li>
@@ -381,7 +384,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
           <div className="mb-4 flex items-baseline justify-between border-b border-border pb-2">
             <h2 className="font-serif text-lg font-semibold">Upcoming Events</h2>
             <span className="text-xs text-muted-foreground">
-              {eventsLoading ? 'Loading...' : `${sortedUpcomingEvents.length} scheduled`}
+              {eventsLoading ? 'Loading...' : `${sortedUpcomingEvents.length} upcoming`}
             </span>
           </div>
 
@@ -407,9 +410,8 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
           ) : (
             <div className="divide-y divide-border">
               {sortedUpcomingEvents.map((event, index) => {
-                const isSoonest = index === 0;
-                const start = parseISO(event.startDateTime);
-                const end = parseISO(event.endDateTime);
+                const tba = isTba(event);
+                const isSoonest = index === 0 && !tba;
 
                 return (
                   <article
@@ -430,43 +432,54 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
                   >
                     <div className="mb-1 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <p className="text-xs text-muted-foreground">
-                          {format(start, 'EEEE, MMMM d')}
-                        </p>
+                        {tba ? (
+                          <TbaTag />
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            {formatEventDate(event, 'EEEE, MMMM d')}
+                          </p>
+                        )}
+                        {event.kind === 'meeting' && (
+                          <span className="border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-sky-700 dark:text-sky-400">
+                            Meeting
+                          </span>
+                        )}
                         {isSoonest && (
                           <span className="border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
                             Soonest
                           </span>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        title="Delete event"
-                        aria-label={`Delete event ${event.title}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEventToDelete(event);
-                        }}
-                        className="p-1 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all hover:text-destructive hover:bg-destructive/10"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {EVENT_FEATURES.editing && (
+                        <button
+                          type="button"
+                          title="Delete event"
+                          aria-label={`Delete event ${event.title}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEventToDelete(event);
+                          }}
+                          className="p-1 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
                     <h3 className="font-serif text-base font-semibold leading-snug text-foreground transition-colors group-hover:text-primary">
                       {event.title}
                     </h3>
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1.5">
-                        <Clock className="h-3 w-3 shrink-0" />
-                        {format(start, 'h:mm a')}
-                        {' – '}
-                        {format(end, 'h:mm a')}
-                      </span>
+                      {!tba && (
+                        <span className="flex items-center gap-1.5">
+                          <Clock className="h-3 w-3 shrink-0" />
+                          {formatEventTimeRange(event)}
+                        </span>
+                      )}
                       <span className="flex items-center gap-1.5">
                         <MapPin className="h-3 w-3 shrink-0" />
                         {event.location || 'Location TBA'}
                       </span>
-                      {event.rsvpCount > 0 && (
+                      {EVENT_FEATURES.rsvp && event.rsvpCount > 0 && (
                         <span>
                           {event.rsvpCount} RSVPs
                         </span>
@@ -584,8 +597,9 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
           <DialogHeader>
             <div className="flex items-center gap-2">
               <Badge variant="outline" style={{ borderRadius: 0 }} className="text-[10px] uppercase tracking-wider capitalize">
-                {selectedEvent?.category}
+                {selectedEvent && eventKindLabel(selectedEvent)}
               </Badge>
+              {selectedEvent && isTba(selectedEvent) && <TbaTag />}
               <span className="font-mono text-xs text-muted-foreground">
                 /events/{selectedEvent?.id} (Route stub)
               </span>
@@ -594,7 +608,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
               {selectedEvent?.title}
             </DialogTitle>
             <DialogDescription>
-              {selectedEvent && format(parseISO(selectedEvent.startDateTime), 'EEEE, MMMM d, yyyy')}
+              {selectedEvent && formatEventDate(selectedEvent, 'EEEE, MMMM d, yyyy')}
             </DialogDescription>
           </DialogHeader>
 
@@ -603,22 +617,36 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
               <div className="flex flex-wrap gap-4 border-y border-border py-2.5 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1.5">
                   <Clock className="h-3.5 w-3.5" />
-                  {format(parseISO(selectedEvent.startDateTime), 'h:mm a')} – {format(parseISO(selectedEvent.endDateTime), 'h:mm a')}
+                  {formatEventTimeRange(selectedEvent)}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <MapPin className="h-3.5 w-3.5" />
                   {selectedEvent.location || 'Location TBA'}
                 </span>
-                {selectedEvent.rsvpCount > 0 && (
+                {EVENT_FEATURES.rsvp && selectedEvent.rsvpCount > 0 && (
                   <span>{selectedEvent.rsvpCount} RSVPs</span>
                 )}
               </div>
 
-              <p className="leading-relaxed text-muted-foreground">
-                {selectedEvent.description}
-              </p>
+              {EVENT_FEATURES.description && (
+                <p className="leading-relaxed text-muted-foreground">
+                  {selectedEvent.description}
+                </p>
+              )}
 
-              {selectedEvent.agenda && selectedEvent.agenda.length > 0 && (
+              {selectedEvent.notionUrl && (
+                <a
+                  href={selectedEvent.notionUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Open in Notion
+                </a>
+              )}
+
+              {EVENT_FEATURES.agenda && selectedEvent.agenda && selectedEvent.agenda.length > 0 && (
                 <div className="space-y-2 border-t border-border pt-3">
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Agenda
@@ -651,7 +679,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
                   Open in Calendar
                 </Button>
               )}
-              {selectedEvent && (
+              {EVENT_FEATURES.editing && selectedEvent && (
                 <Button
                   type="button"
                   variant="outline"

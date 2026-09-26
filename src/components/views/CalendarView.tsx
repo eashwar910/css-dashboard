@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
 import {
   format,
-  parseISO,
   isSameDay,
   isSameMonth,
   startOfMonth,
@@ -11,7 +10,7 @@ import {
   eachDayOfInterval,
   addMonths,
   subMonths,
-  compareAsc,
+  addDays,
 } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -66,15 +65,40 @@ import {
   CheckSquare,
   TrendingUp,
   TrendingDown,
+  ExternalLink,
 } from 'lucide-react';
 import type { Event, EventCategory, AgendaItem, EventStatus, EventTodoItem, FinanceItem } from '@/lib/types';
 import { useEvents } from '@/hooks/useEvents';
+import { EVENT_FEATURES } from '@/lib/features';
+import { TbaTag } from '@/components/TbaTag';
+import {
+  eventEnd,
+  eventKindLabel,
+  eventStart,
+  formatEventDate,
+  formatEventTimeRange,
+  isTba,
+  parseDate,
+} from '@/lib/eventDates';
 
 /** Calendar chip colours, keyed by event progression status. */
 const STATUS_CHIP_CLASSES: Record<EventStatus, string> = {
   'scheduled': 'border-primary/20 bg-primary/10 text-primary hover:bg-primary/20',
   'planning-in-progress': 'border-amber-500/30 bg-amber-500/10 text-amber-600 hover:bg-amber-500/20',
   'done': 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20',
+};
+
+/** Meetings get their own colour and no status. */
+const MEETING_CHIP_CLASSES = 'border-sky-500/30 bg-sky-500/10 text-sky-700 hover:bg-sky-500/20 dark:text-sky-400';
+
+function chipClasses(e: Event) {
+  return e.kind === 'meeting' ? MEETING_CHIP_CLASSES : STATUS_CHIP_CLASSES[e.status ?? 'scheduled'];
+}
+
+const STATUS_LABELS: Record<EventStatus, string> = {
+  'scheduled': 'Scheduled',
+  'planning-in-progress': 'Planning in Progress',
+  'done': 'Done',
 };
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -91,9 +115,14 @@ function formatHourLabel(h: number) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function downloadIcsFile(event: Event) {
-  const start = parseISO(event.startDateTime);
-  const end = parseISO(event.endDateTime);
-  const formatIcsDate = (d: Date) => format(d, "yyyyMMdd'T'HHmmss");
+  const start = eventStart(event);
+  const end = eventEnd(event);
+  if (!start || !end) return; // TBA events have nothing to export
+  // All-day events use DATE values; DTEND is exclusive, so it's the day after.
+  const dtStart = event.allDay ? `DTSTART;VALUE=DATE:${format(start, 'yyyyMMdd')}` : `DTSTART:${format(start, "yyyyMMdd'T'HHmmss")}`;
+  const dtEnd = event.allDay
+    ? `DTEND;VALUE=DATE:${format(addDays(end, 1), 'yyyyMMdd')}`
+    : `DTEND:${format(end, "yyyyMMdd'T'HHmmss")}`;
 
   let desc = event.description || '';
   if (event.agenda && event.agenda.length > 0) {
@@ -122,9 +151,9 @@ function downloadIcsFile(event: Event) {
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',
     `UID:${event.id}-${Date.now()}@css-dashboard`,
-    `DTSTAMP:${format(new Date(), "yyyyMMdd'T'HHmmss'Z'")}`,
-    `DTSTART:${formatIcsDate(start)}`,
-    `DTEND:${formatIcsDate(end)}`,
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}`, // UTC
+    dtStart,
+    dtEnd,
     `SUMMARY:${escapeIcs(event.title)}`,
     `DESCRIPTION:${escapeIcs(desc)}`,
     ...(event.location ? [`LOCATION:${escapeIcs(event.location)}`] : []),
@@ -145,7 +174,7 @@ function downloadIcsFile(event: Event) {
 }
 
 export function CalendarView() {
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 8, 1));
+  const [currentDate, setCurrentDate] = useState(() => startOfMonth(new Date()));
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
@@ -155,7 +184,7 @@ export function CalendarView() {
   const { toast } = useToast();
 
   // Data layer hook acts as the single source of truth across the app
-  const { data: allEvents, isLoading, error, forMonth, addEvent, rsvpEvent, removeEvent, updateEvent } = useEvents();
+  const { data: allEvents, tba: tbaEvents, isLoading, error, forMonth, addEvent, rsvpEvent, removeEvent, updateEvent } = useEvents();
 
   // Event detail dialog tab state
   const [eventDetailTab, setEventDetailTab] = useState<'overview' | 'todo' | 'finance'>('overview');
@@ -184,19 +213,18 @@ export function CalendarView() {
     [forMonth, currentDate]
   );
 
-  // All events sorted chronologically for Agenda/List view
-  const allEventsChronological = useMemo(() => {
-    return [...allEvents].sort((a, b) =>
-      compareAsc(parseISO(a.startDateTime), parseISO(b.startDateTime))
-    );
-  }, [allEvents]);
+  // All events for the Agenda/List view: already sorted by date, TBA last
+  const allEventsChronological = allEvents;
 
   const eventsForDay = (day: Date) =>
-    allEvents.filter((e) => isSameDay(parseISO(e.startDateTime), day));
+    allEvents.filter((e) => {
+      const start = eventStart(e);
+      return start !== null && isSameDay(start, day);
+    });
 
   const handlePrevMonth = () => setCurrentDate((d) => subMonths(d, 1));
   const handleNextMonth = () => setCurrentDate((d) => addMonths(d, 1));
-  const handleToday = () => setCurrentDate(new Date(2026, 8, 1));
+  const handleToday = () => setCurrentDate(startOfMonth(new Date()));
 
   const eventsForSelected = selectedDate ? eventsForDay(selectedDate) : [];
 
@@ -255,14 +283,16 @@ export function CalendarView() {
               </button>
             </div>
 
-            <button
-              onClick={() => setDialogOpen(true)}
-              style={{ borderRadius: 0 }}
-              className="flex items-center gap-2 border border-border bg-background px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:border-primary hover:text-primary"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add event
-            </button>
+            {EVENT_FEATURES.editing && (
+              <button
+                onClick={() => setDialogOpen(true)}
+                style={{ borderRadius: 0 }}
+                className="flex items-center gap-2 border border-border bg-background px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:border-primary hover:text-primary"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add event
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -367,7 +397,7 @@ export function CalendarView() {
                             }}
                             className={cn(
                               'truncate text-left border px-1 py-0.5 text-[0.62rem] leading-tight transition-colors',
-                              STATUS_CHIP_CLASSES[e.status ?? 'scheduled']
+                              chipClasses(e)
                             )}
                           >
                             {e.title}
@@ -405,7 +435,6 @@ export function CalendarView() {
                 ) : (
                   <div className="divide-y divide-border">
                     {eventsForSelected.map((e) => {
-                      const s = parseISO(e.startDateTime);
                       return (
                         <div
                           key={e.id}
@@ -416,32 +445,34 @@ export function CalendarView() {
                             <p className="font-serif text-sm font-semibold">{e.title}</p>
                             <div className="flex items-center gap-1.5">
                               <Badge variant="outline" className="text-[10px] capitalize">
-                                {e.category}
+                                {eventKindLabel(e)}
                               </Badge>
-                              <button
-                                type="button"
-                                title="Delete event"
-                                aria-label={`Delete event ${e.title}`}
-                                onClick={(ev) => {
-                                  ev.stopPropagation();
-                                  setEventToDelete(e);
-                                }}
-                                className="p-1 text-muted-foreground transition-colors hover:text-destructive hover:bg-destructive/10"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
+                              {EVENT_FEATURES.editing && (
+                                <button
+                                  type="button"
+                                  title="Delete event"
+                                  aria-label={`Delete event ${e.title}`}
+                                  onClick={(ev) => {
+                                    ev.stopPropagation();
+                                    setEventToDelete(e);
+                                  }}
+                                  className="p-1 text-muted-foreground transition-colors hover:text-destructive hover:bg-destructive/10"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
                             </div>
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {format(s, 'h:mm a')} – {format(parseISO(e.endDateTime), 'h:mm a')}
+                            {formatEventTimeRange(e)}
                             {e.location && ` · ${e.location}`}
                           </p>
-                          {e.description && (
+                          {EVENT_FEATURES.description && e.description && (
                             <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                               {e.description}
                             </p>
                           )}
-                          {e.agenda.length > 0 && (
+                          {EVENT_FEATURES.agenda && e.agenda.length > 0 && (
                             <p className="mt-1.5 text-[11px] text-primary/80">
                               {e.agenda.length} agenda {e.agenda.length === 1 ? 'item' : 'items'} · Click to view timeline
                             </p>
@@ -460,7 +491,9 @@ export function CalendarView() {
             <div className="mb-4 flex items-baseline justify-between border-b border-border pb-2">
               <h2 className="font-serif text-lg font-semibold">Event Schedule</h2>
               <span className="text-xs text-muted-foreground">
-                {isLoading ? 'Loading...' : `${monthlySortedEvents.length} in ${format(currentDate, 'MMMM')}`}
+                {isLoading
+                  ? 'Loading...'
+                  : `${monthlySortedEvents.length} in ${format(currentDate, 'MMMM')}${tbaEvents.length ? ` · ${tbaEvents.length} TBA` : ''}`}
               </span>
             </div>
 
@@ -475,65 +508,80 @@ export function CalendarView() {
                     </div>
                   ))}
                 </div>
-              ) : monthlySortedEvents.length === 0 ? (
+              ) : monthlySortedEvents.length === 0 && tbaEvents.length === 0 ? (
                 <p className="py-8 text-xs text-muted-foreground">
                   No events scheduled for this month.
                 </p>
               ) : (
                 <div className="divide-y divide-border">
-                  {monthlySortedEvents.map((event) => {
-                    const start = parseISO(event.startDateTime);
-                    const end = parseISO(event.endDateTime);
+                  {monthlySortedEvents.length === 0 && (
+                    <p className="py-4 text-xs text-muted-foreground">No dated events this month.</p>
+                  )}
+                  {[...monthlySortedEvents, ...tbaEvents].map((event, index) => {
+                    const tba = isTba(event);
                     return (
                       <article
                         key={event.id}
                         onClick={() => setSelectedEvent(event)}
                         className="group cursor-pointer py-4 pr-2 transition-colors"
                       >
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs text-muted-foreground">
-                            {format(start, 'EEE, MMM d')}
+                        {tba && index === monthlySortedEvents.length && (
+                          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            Date to be announced
                           </p>
+                        )}
+                        <div className="flex items-center justify-between">
+                          {tba ? (
+                            <TbaTag />
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              {formatEventDate(event, 'EEE, MMM d')}
+                            </p>
+                          )}
                           <div className="flex items-center gap-1.5">
                             <Badge variant="outline" className="text-[10px] capitalize">
-                              {event.category}
+                              {eventKindLabel(event)}
                             </Badge>
-                            <button
-                              type="button"
-                              title="Delete event"
-                              aria-label={`Delete event ${event.title}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEventToDelete(event);
-                              }}
-                              className="p-1 text-muted-foreground transition-colors hover:text-destructive hover:bg-destructive/10"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                            {EVENT_FEATURES.editing && (
+                              <button
+                                type="button"
+                                title="Delete event"
+                                aria-label={`Delete event ${event.title}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEventToDelete(event);
+                                }}
+                                className="p-1 text-muted-foreground transition-colors hover:text-destructive hover:bg-destructive/10"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </div>
                         </div>
                         <p className="mt-1 font-serif text-base font-semibold leading-snug group-hover:text-primary transition-colors">
                           {event.title}
                         </p>
                         <div className="mt-1.5 space-y-1 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1.5">
-                            <Clock className="h-3 w-3 shrink-0" />
-                            {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
-                          </span>
+                          {!tba && (
+                            <span className="flex items-center gap-1.5">
+                              <Clock className="h-3 w-3 shrink-0" />
+                              {formatEventTimeRange(event)}
+                            </span>
+                          )}
                           {event.location && (
                             <span className="flex items-center gap-1.5">
                               <MapPin className="h-3 w-3 shrink-0" />
                               {event.location}
                             </span>
                           )}
-                          {event.rsvpCount > 0 && (
+                          {EVENT_FEATURES.rsvp && event.rsvpCount > 0 && (
                             <span className="flex items-center gap-1.5">
                               <Users className="h-3 w-3 shrink-0" />
                               {event.rsvpCount} Going
                             </span>
                           )}
                         </div>
-                        {event.agenda && event.agenda.length > 0 && (
+                        {EVENT_FEATURES.agenda && event.agenda && event.agenda.length > 0 && (
                           <div className="mt-2 text-[11px] text-muted-foreground/80">
                             {event.agenda.length} scheduled segments
                           </div>
@@ -552,7 +600,9 @@ export function CalendarView() {
           <div className="flex items-baseline justify-between border-b border-border pb-2">
             <h2 className="font-serif text-xl font-semibold">All Events (Chronological)</h2>
             <span className="text-xs text-muted-foreground">
-              {isLoading ? 'Loading...' : `${allEventsChronological.length} total events`}
+              {isLoading
+                ? 'Loading...'
+                : `${allEventsChronological.length} total${tbaEvents.length ? ` · ${tbaEvents.length} TBA` : ''}`}
             </span>
           </div>
 
@@ -573,8 +623,7 @@ export function CalendarView() {
           ) : (
             <div className="divide-y divide-border border-b border-border">
               {allEventsChronological.map((event) => {
-                const start = parseISO(event.startDateTime);
-                const end = parseISO(event.endDateTime);
+                const tba = isTba(event);
                 return (
                   <article
                     key={event.id}
@@ -585,16 +634,22 @@ export function CalendarView() {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-1.5 flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-semibold text-primary">
-                            {format(start, 'EEEE, MMMM d, yyyy')}
-                          </span>
-                          <span className="text-muted-foreground/60 hidden sm:inline">·</span>
-                          <span className="text-xs text-muted-foreground">
-                            {format(start, 'h:mm a')} – {format(end, 'h:mm a')}
-                          </span>
+                          {tba ? (
+                            <TbaTag />
+                          ) : (
+                            <>
+                              <span className="text-xs font-semibold text-primary">
+                                {formatEventDate(event, 'EEEE, MMMM d, yyyy')}
+                              </span>
+                              <span className="text-muted-foreground/60 hidden sm:inline">·</span>
+                              <span className="text-xs text-muted-foreground">
+                                {formatEventTimeRange(event)}
+                              </span>
+                            </>
+                          )}
                           {/* Mobile-only badge inline with date */}
                           <Badge variant="outline" className="sm:hidden text-[10px] capitalize ml-auto">
-                            {event.category}
+                            {eventKindLabel(event)}
                           </Badge>
                         </div>
                         <h3 className="font-serif text-base sm:text-lg font-semibold text-foreground group-hover:text-primary transition-colors">
@@ -606,7 +661,7 @@ export function CalendarView() {
                             {event.location}
                           </p>
                         )}
-                        {event.description && (
+                        {EVENT_FEATURES.description && event.description && (
                           <p className="pt-0.5 text-xs text-muted-foreground line-clamp-2">
                             {event.description}
                           </p>
@@ -617,26 +672,30 @@ export function CalendarView() {
                       <div className="flex shrink-0 items-center justify-between sm:justify-end gap-3 sm:flex-col sm:items-end sm:gap-2 pt-1 sm:pt-0 border-t border-border/40 sm:border-0">
                         <div className="flex items-center gap-1.5">
                           <Badge variant="outline" className="hidden sm:inline-flex text-[10px] capitalize">
-                            {event.category}
+                            {eventKindLabel(event)}
                           </Badge>
-                          <button
-                            type="button"
-                            title="Delete event"
-                            aria-label={`Delete event ${event.title}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEventToDelete(event);
-                            }}
-                            className="p-1 text-muted-foreground transition-colors hover:text-destructive hover:bg-destructive/10"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          {EVENT_FEATURES.editing && (
+                            <button
+                              type="button"
+                              title="Delete event"
+                              aria-label={`Delete event ${event.title}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEventToDelete(event);
+                              }}
+                              className="p-1 text-muted-foreground transition-colors hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </div>
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Users className="h-3 w-3 sm:hidden" />
-                          {event.rsvpCount} Going
-                        </span>
-                        {event.agenda && event.agenda.length > 0 && (
+                        {EVENT_FEATURES.rsvp && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Users className="h-3 w-3 sm:hidden" />
+                            {event.rsvpCount} Going
+                          </span>
+                        )}
+                        {EVENT_FEATURES.agenda && event.agenda && event.agenda.length > 0 && (
                           <span className="text-[11px] text-primary/80">
                             {event.agenda.length} {event.agenda.length === 1 ? 'segment' : 'segments'}
                           </span>
@@ -675,8 +734,9 @@ export function CalendarView() {
               {/* Top row: badge + route */}
               <div className="flex items-center gap-2">
                 <Badge variant="outline" style={{ borderRadius: 0 }} className="text-[10px] uppercase tracking-wider capitalize">
-                  {activeSelectedEvent.category}
+                  {eventKindLabel(activeSelectedEvent)}
                 </Badge>
+                {isTba(activeSelectedEvent) && <TbaTag />}
                 <span className="font-mono text-xs text-muted-foreground">
                   /events/{activeSelectedEvent.id}
                 </span>
@@ -738,6 +798,7 @@ export function CalendarView() {
                           updateEvent(activeSelectedEvent.id, {
                             startDateTime: `${editStartDate}T${editStartTime}:00`,
                             endDateTime: `${editEndDate}T${editEndTime}:00`,
+                            allDay: false,
                           });
                           toast({ title: 'Dates updated', description: 'Event dates have been saved.' });
                         }
@@ -758,39 +819,39 @@ export function CalendarView() {
                 ) : (
                   <div className="flex items-center gap-2">
                     <DialogDescription className="text-xs text-muted-foreground">
-                      {format(parseISO(activeSelectedEvent.startDateTime), 'EEEE, MMMM d, yyyy')}
+                      {formatEventDate(activeSelectedEvent, 'EEEE, MMMM d, yyyy')}
                     </DialogDescription>
-                    <button
-                      type="button"
-                      title="Edit dates"
-                      onClick={() => {
-                        const s = parseISO(activeSelectedEvent.startDateTime);
-                        const en = parseISO(activeSelectedEvent.endDateTime);
-                        setEditStartDate(format(s, 'yyyy-MM-dd'));
-                        setEditStartTime(format(s, 'HH:mm'));
-                        setEditEndDate(format(en, 'yyyy-MM-dd'));
-                        setEditEndTime(format(en, 'HH:mm'));
-                        setEditingDates(true);
-                      }}
-                      className="p-1 text-muted-foreground hover:text-primary transition-colors"
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </button>
+                    {EVENT_FEATURES.editing && (
+                      <button
+                        type="button"
+                        title="Edit dates"
+                        onClick={() => {
+                          const s = eventStart(activeSelectedEvent);
+                          const en = parseDate(activeSelectedEvent.endDateTime) ?? s;
+                          setEditStartDate(s ? format(s, 'yyyy-MM-dd') : '');
+                          setEditStartTime(s ? format(s, 'HH:mm') : '');
+                          setEditEndDate(en ? format(en, 'yyyy-MM-dd') : '');
+                          setEditEndTime(en ? format(en, 'HH:mm') : '');
+                          setEditingDates(true);
+                        }}
+                        className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
             </DialogHeader>
 
-            {/* ── Progression Status ── */}
+            {/* ── Progression Status (events only; meetings have none) ── */}
+            {activeSelectedEvent.kind === 'event' && (
             <div className="flex items-center gap-2 pt-1">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status:</span>
               {(['scheduled', 'planning-in-progress', 'done'] as EventStatus[]).map((s) => {
                 const isActive = (activeSelectedEvent.status ?? 'scheduled') === s;
-                const labels: Record<EventStatus, string> = {
-                  'scheduled': 'Scheduled',
-                  'planning-in-progress': 'Planning in Progress',
-                  'done': 'Done',
-                };
+                // Read-only unless event editing is enabled: show just the current status.
+                if (!EVENT_FEATURES.editing && !isActive) return null;
                 const colors: Record<EventStatus, string> = {
                   'scheduled': 'border-border text-muted-foreground hover:border-foreground hover:text-foreground',
                   'planning-in-progress': 'border-amber-500/60 text-amber-600 hover:border-amber-500 hover:text-amber-600',
@@ -805,17 +866,19 @@ export function CalendarView() {
                   <button
                     key={s}
                     type="button"
+                    disabled={!EVENT_FEATURES.editing}
                     onClick={() => updateEvent(activeSelectedEvent.id, { status: s })}
                     className={cn(
-                      'border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors',
+                      'border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors disabled:cursor-default',
                       isActive ? activeColors[s] : colors[s]
                     )}
                   >
-                    {labels[s]}
+                    {STATUS_LABELS[s]}
                   </button>
                 );
               })}
             </div>
+            )}
 
             {/* ── Inner Tab Nav: Overview / To-do / Finance Reports ── */}
             <div className="flex border-b border-border mt-2">
@@ -843,9 +906,7 @@ export function CalendarView() {
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border py-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <Clock className="h-3.5 w-3.5 shrink-0" />
-                {format(parseISO(activeSelectedEvent.startDateTime), 'h:mm a')}
-                {' – '}
-                {format(parseISO(activeSelectedEvent.endDateTime), 'h:mm a')}
+                {formatEventTimeRange(activeSelectedEvent)}
               </span>
               {activeSelectedEvent.location && (
                 <span className="flex items-center gap-1.5">
@@ -853,10 +914,12 @@ export function CalendarView() {
                   {activeSelectedEvent.location}
                 </span>
               )}
-              <span className="flex items-center gap-1.5">
-                <Users className="h-3.5 w-3.5 shrink-0" />
-                {activeSelectedEvent.rsvpCount} Going
-              </span>
+              {EVENT_FEATURES.rsvp && (
+                <span className="flex items-center gap-1.5">
+                  <Users className="h-3.5 w-3.5 shrink-0" />
+                  {activeSelectedEvent.rsvpCount} Going
+                </span>
+              )}
             </div>
 
             {/* ── Tab Panels ── */}
@@ -865,7 +928,18 @@ export function CalendarView() {
               {/* ── OVERVIEW TAB ── */}
               {eventDetailTab === 'overview' && (
                 <>
-                  {activeSelectedEvent.description && (
+                  {activeSelectedEvent.notionUrl && (
+                    <a
+                      href={activeSelectedEvent.notionUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Open in Notion
+                    </a>
+                  )}
+                  {EVENT_FEATURES.description && activeSelectedEvent.description && (
                     <div className="space-y-1.5">
                       <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         About this event
@@ -876,6 +950,7 @@ export function CalendarView() {
                     </div>
                   )}
 
+                  {EVENT_FEATURES.agenda && (
                   <div className="space-y-3 border-t border-border pt-4">
                     <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Event Schedule &amp; Timeline
@@ -897,6 +972,7 @@ export function CalendarView() {
                       <p className="text-xs text-muted-foreground italic">No breakdown schedule provided for this event.</p>
                     )}
                   </div>
+                  )}
                 </>
               )}
 
@@ -913,6 +989,7 @@ export function CalendarView() {
 
             <DialogFooter className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center">
               <div className="flex flex-wrap items-center gap-2">
+                {EVENT_FEATURES.rsvp && (
                 <Button
                   size="sm"
                   variant={rsvpedEventIds.has(activeSelectedEvent.id) ? 'secondary' : 'default'}
@@ -929,29 +1006,34 @@ export function CalendarView() {
                     <>Going ({activeSelectedEvent.rsvpCount})</>
                   )}
                 </Button>
+                )}
 
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
                   style={{ borderRadius: 0 }}
+                  disabled={isTba(activeSelectedEvent)}
+                  title={isTba(activeSelectedEvent) ? 'No date set yet' : undefined}
                   onClick={() => downloadIcsFile(activeSelectedEvent)}
                 >
                   <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />
                   Add to calendar (.ics)
                 </Button>
 
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  style={{ borderRadius: 0 }}
-                  className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:border-destructive hover:text-destructive"
-                  onClick={() => setEventToDelete(activeSelectedEvent)}
-                >
-                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                  Delete
-                </Button>
+                {EVENT_FEATURES.editing && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    style={{ borderRadius: 0 }}
+                    className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:border-destructive hover:text-destructive"
+                    onClick={() => setEventToDelete(activeSelectedEvent)}
+                  >
+                    <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                    Delete
+                  </Button>
+                )}
               </div>
 
               <Button
@@ -1315,6 +1397,7 @@ function CreateEventDialog({
 
     onAdd({
       id: `evt-${Date.now()}`,
+      kind: 'event',
       title: name,
       startDateTime,
       endDateTime,

@@ -61,20 +61,35 @@ export interface FinanceItem {
   type: 'income' | 'expense';
 }
 
+/** Team Dashboard > Events rows are 'event'; Team Dashboard > Meetings rows are 'meeting'. */
+export type EventKind = 'event' | 'meeting';
+
 export interface Event {
   id: string;
+  kind: EventKind;
   title: string;
+  /** No Notion source yet; always '' (hidden in the UI, see EVENT_FEATURES). */
   description: string;
-  /** ISO-8601 datetime string, e.g. "2026-09-24T18:00:00" */
-  startDateTime: string;
-  /** ISO-8601 datetime string */
-  endDateTime: string;
+  /**
+   * ISO-8601 date ("2026-09-30", when allDay) or datetime with offset
+   * ("2026-09-30T19:00:00.000+08:00"). Undefined when the date is TBA.
+   */
+  startDateTime?: string;
+  /** Same format as startDateTime. Undefined when there's no end or no date. */
+  endDateTime?: string;
+  /** True when Notion holds a date without a time. */
+  allDay?: boolean;
   location?: string;
+  /** Notion has no category; derived from kind ('meeting' or 'other'). */
   category: EventCategory;
+  /** No Notion source yet; always []. */
   agenda: AgendaItem[];
+  /** No Notion source yet; always 0. */
   rsvpCount: number;
-  /** Progression status label */
+  /** Progression status label. Undefined for meetings. */
   status?: EventStatus;
+  /** Link to the event's Notion page. */
+  notionUrl?: string;
   /** Per-event to-do items */
   todos?: EventTodoItem[];
   /** Per-event finance items */
