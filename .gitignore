@@ -24,3 +24,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Notion survey output (contains real member data)
+notion-survey.json
