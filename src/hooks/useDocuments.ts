@@ -1,16 +1,17 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import type { AsyncResult, Document } from '@/lib/types';
-import { mockDocuments } from '@/data';
+import { useApiResource } from '@/hooks/useApiResource';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // useDocuments
 //
-// Returns all linked documents plus grouping helpers.
-// Simulates an artificial latency (350ms) to exercise loading/empty/error states.
-//
-// FUTURE: Replace the setTimeout block with a Notion page-list fetch:
-//   const { data, isLoading, error } = useSWR<Document[]>('/api/documents', fetcher);
+// Returns the Notion Documents data source (GET /api/documents) plus
+// grouping helpers.
 // ─────────────────────────────────────────────────────────────────────────────
+
+interface DocumentsResponse {
+  documents: { id: string; name: string; url: string; icon: string; category: string | null }[];
+}
 
 export interface DocumentsResult extends AsyncResult<Document[]> {
   /** Documents grouped by their optional `category` field.
@@ -19,17 +20,19 @@ export interface DocumentsResult extends AsyncResult<Document[]> {
 }
 
 export function useDocuments(): DocumentsResult {
-  const [data, setData] = useState<Document[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error] = useState<Error | null>(null);
+  const { data: response, isLoading, error } = useApiResource<DocumentsResponse>('documents');
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setData(mockDocuments);
-      setIsLoading(false);
-    }, 350);
-    return () => clearTimeout(timer);
-  }, []);
+  const data = useMemo<Document[]>(
+    () =>
+      (response?.documents ?? []).map((d) => ({
+        id: d.id,
+        name: d.name,
+        url: d.url,
+        icon: d.icon,
+        category: d.category ?? undefined,
+      })),
+    [response]
+  );
 
   const byCategory = useMemo<Record<string, Document[]>>(
     () =>

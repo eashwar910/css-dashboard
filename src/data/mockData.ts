@@ -9,7 +9,7 @@
 //   useTasks()        → src/hooks/useTasks.ts
 //   useEvents()       → src/hooks/useEvents.ts
 //   useTeamMembers()  → src/hooks/useTeamMembers.ts (real data via /api/team)
-//   useDocuments()    → src/hooks/useDocuments.ts
+//   useDocuments()    → src/hooks/useDocuments.ts (real data via /api/documents)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Re-export canonical types (renamed for backward compat where needed)
@@ -18,4 +18,3 @@ export type { Task, Event as EventItem, TeamMember, Document as DocumentLink } f
 // Re-export mock arrays under the old names
 export { mockTasks as weeklyTasks } from './tasks';
 export { mockEvents as upcomingEvents, mockEvents as monthlyEvents } from './events';
-export { mockDocuments as documents } from './documents';

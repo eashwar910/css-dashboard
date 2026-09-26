@@ -116,7 +116,7 @@ Every ringgit in or out is one row. Exact property names and options are in `NOT
 1. ~~Re-run the survey and update `NOTION_MAPPING.md`.~~ **Done 2026-09-26.**
 2. ~~Build `/api/_lib`: Notion client, property helpers, auth and committee check, ownership helper, plus `GET /api/me` for testing.~~ **Done.**
 3. ~~Team (read), including `memberDetails.js` and the email join from Supabase.~~ **Done** (`api/_lib/memberDetails.ts`; email join needs `SUPABASE_SERVICE_ROLE_KEY`).
-4. Documents (read).
+4. ~~Documents (read).~~ **Done.**
 5. Events and Meetings (read), including the TBA tag, `kind`, and optional status and dates.
 6. Tasks and weekly scrum (read).
 7. Task writes: tick/untick, create, edit, delete, with the ownership rules.
