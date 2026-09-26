@@ -62,7 +62,8 @@ export async function requireCommittee(req: VercelRequest, res: VercelResponse):
   if (error) throw new Error(`committee_members lookup failed: ${error.message}`);
 
   const row = rows?.[0] as Record<string, unknown> | undefined;
-  if (!row) {
+  // `active` is a column on committee_members; only an explicit false blocks access.
+  if (!row || row.active === false) {
     sendError(res, 403, 'Not a committee member');
     return null;
   }

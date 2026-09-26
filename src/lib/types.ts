@@ -28,7 +28,11 @@ export interface Task {
   eventIds: string[];
   /** The signed-in member is a PIC on this task. */
   mine: boolean;
-  /** Included in the weekly scrum view (mine; not Done, or Done this week). */
+  /** PIC is only groups or empty: shown to everyone under "Shared". */
+  shared: boolean;
+  /** Group name(s) for shared tasks, or "Unassigned". */
+  sharedWith?: string;
+  /** Included in the weekly scrum view (mine or shared; not Done, or Done this week). */
   weekly: boolean;
 }
 

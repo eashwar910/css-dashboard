@@ -52,7 +52,11 @@ The integration is `css-dashboard`, an internal connection using an API token. I
 ## Tasks and weekly scrum to-dos
 - Weekly scrum to-dos are per-person, per-event to-do items that get reviewed and checked off weekly. They are rows in Tasks.
 - `PIC` (people) is the owner of each to-do, not of the event. `Events` (relation) links the to-do to its event.
-- The weekly view shows the logged-in user's tasks (those whose PIC includes them), grouped by linked event, with "General" for tasks that have no event. It shows:
+- The weekly view shows:
+  - the logged-in user's tasks (those whose PIC includes them), grouped by linked event, with "General" for tasks that have no event;
+  - then a **"Shared"** group with every task whose PIC has no individual person (only groups such as "Everyone" or a department, or nobody). Each shared task shows its group name, or "Unassigned" if PIC is empty. Every member sees these.
+
+  In both, it includes:
   - tasks not yet Done
   - Done tasks whose `last_edited_time` falls in the current week
 - Ticking a task sets Status to Done. Unticking sets it back to Not started.

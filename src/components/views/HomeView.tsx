@@ -525,7 +525,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
             ) : (
               <ScrollArea className="h-[340px] scrollbar-thin">
                 {weeklyGroups.map((group) => (
-                <div key={group.eventId ?? 'general'} className="mb-2">
+                <div key={group.key} className="mb-2">
                 <h3 className="pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   {group.name}
                 </h3>
@@ -556,6 +556,12 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
                               <Circle className="h-3 w-3 shrink-0" />
                             )}
                             <span>{formatDueDate(task.dueDate)}</span>
+                            {task.sharedWith && (
+                              <>
+                                <span className="text-muted-foreground/60">·</span>
+                                <span>{task.sharedWith}</span>
+                              </>
+                            )}
                           </p>
                         </div>
                       </label>

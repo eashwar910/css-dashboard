@@ -19,6 +19,8 @@ interface TasksResponse {
     eventIds: string[];
     eventName: string | null;
     mine: boolean;
+    shared: boolean;
+    sharedWith: string | null;
     weekly: boolean;
   }[];
   weekStart: string;
@@ -45,6 +47,8 @@ const store = createApiStore<TasksResponse, TasksValue>(
       dueDate: t.dueDate ?? undefined,
       eventIds: t.eventIds,
       mine: t.mine,
+      shared: t.shared,
+      sharedWith: t.sharedWith ?? undefined,
       weekly: t.weekly,
     })),
     weekStart: res.weekStart,
@@ -54,11 +58,15 @@ const store = createApiStore<TasksResponse, TasksValue>(
   { tasks: [], weekStart: null, weekEnd: null, notionLinked: true }
 );
 
-/** Label for tasks with no linked event in the weekly view. */
+/** Label for the member's own tasks with no linked event in the weekly view. */
 export const GENERAL_GROUP = 'General';
+/** Label for group-assigned and unassigned tasks in the weekly view. */
+export const SHARED_GROUP = 'Shared';
 
 export interface WeeklyGroup {
-  /** Event page id, or null for the "General" group. */
+  /** Stable key: event page id, 'general' or 'shared'. */
+  key: string;
+  /** Event page id for event groups; null for "General" and "Shared". */
   eventId: string | null;
   name: string;
   tasks: Task[];
@@ -75,7 +83,7 @@ export interface TasksResult extends AsyncResult<Task[]> {
   totalCount: number;
   /** The signed-in member's weekly scrum to-dos. */
   weekly: Task[];
-  /** Weekly to-dos grouped by linked event (alphabetical), "General" last. */
+  /** Weekly to-dos: the member's own grouped by linked event (alphabetical), then "General", then "Shared". */
   weeklyGroups: WeeklyGroup[];
   /** False when no Notion user matches the member's email (see committee_members.notion_email). */
   notionLinked: boolean;
@@ -123,16 +131,29 @@ export function useTasks(): TasksResult {
   const weekly = useMemo(() => data.filter((t) => t.weekly), [data]);
 
   const weeklyGroups = useMemo<WeeklyGroup[]>(() => {
-    const groups = new Map<string | null, WeeklyGroup>();
+    const events = new Map<string, WeeklyGroup>();
+    const general: WeeklyGroup = { key: 'general', eventId: null, name: GENERAL_GROUP, tasks: [] };
+    const shared: WeeklyGroup = { key: 'shared', eventId: null, name: SHARED_GROUP, tasks: [] };
     for (const task of weekly) {
-      const eventId = task.project ? task.eventIds[0] ?? null : null;
-      const group = groups.get(eventId) ?? { eventId, name: task.project ?? GENERAL_GROUP, tasks: [] };
+      // A task that's both mine and shared can't happen: shared means no individual PIC.
+      if (task.shared) {
+        shared.tasks.push(task);
+        continue;
+      }
+      const eventId = task.project ? task.eventIds[0] : undefined;
+      if (!eventId) {
+        general.tasks.push(task);
+        continue;
+      }
+      const group = events.get(eventId) ?? { key: eventId, eventId, name: task.project!, tasks: [] };
       group.tasks.push(task);
-      groups.set(eventId, group);
+      events.set(eventId, group);
     }
-    return [...groups.values()].sort((a, b) =>
-      a.eventId === null ? 1 : b.eventId === null ? -1 : a.name.localeCompare(b.name)
-    );
+    return [
+      ...[...events.values()].sort((a, b) => a.name.localeCompare(b.name)),
+      general,
+      shared,
+    ].filter((g) => g.tasks.length > 0);
   }, [weekly]);
 
   const forEvent = useCallback((eventId: string) => data.filter((t) => t.eventIds.includes(eventId)), [data]);

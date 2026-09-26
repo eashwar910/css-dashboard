@@ -22,7 +22,14 @@ export interface TaskDto {
   lastEditedTime: string;
   /** A PIC person's email matches the signed-in member's login or notion_email. */
   mine: boolean;
-  /** Shown in the weekly scrum view: mine, and not Done or Done this week. */
+  /**
+   * PIC has no individual person: only groups (e.g. "Everyone") or nobody.
+   * Shown to every member under "Shared" in the weekly view.
+   */
+  shared: boolean;
+  /** For shared tasks: the PIC group name(s), or "Unassigned". null otherwise. */
+  sharedWith: string | null;
+  /** Shown in the weekly scrum view: mine or shared, and not Done or Done this week. */
   weekly: boolean;
 }
 
@@ -34,6 +41,17 @@ const STATUS_MAP: Record<string, TaskStatusDto> = {
 
 // ── Week boundaries (Asia/Kuala_Lumpur, Monday start) ────────────────────────
 // Malaysia is UTC+8 with no daylight saving, so a fixed offset is exact.
+
+/**
+ * Groups and bots aren't individual owners; partial users (id only) are a
+ * person we can't see, so they still count. Same rule as ownership.ts.
+ */
+export function sharedWith(page: PageObjectResponse): string | null {
+  const pic = people(page, 'PIC');
+  if (pic.some((p) => p.kind === 'person' || p.kind === 'unknown')) return null;
+  const groups = pic.filter((p) => p.kind === 'group').map((p) => p.name ?? 'Group');
+  return groups.length ? groups.join(', ') : 'Unassigned';
+}
 
 const KL_OFFSET_MS = 8 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -64,6 +82,7 @@ export function toTask(
   const taskStatus = (notionStatus && STATUS_MAP[notionStatus]) || 'todo';
   const eventIds = relationIds(page, 'Events');
   const mine = isMine(page, member);
+  const shared = sharedWith(page);
   const edited = Date.parse(page.last_edited_time);
   const doneThisWeek = taskStatus === 'done' && edited >= week.start.getTime() && edited < week.end.getTime();
   return {
@@ -75,7 +94,9 @@ export function toTask(
     eventName: eventIds.map((id) => eventNames.get(id)).find((n): n is string => !!n) ?? null,
     lastEditedTime: page.last_edited_time,
     mine,
-    weekly: mine && (taskStatus !== 'done' || doneThisWeek),
+    shared: shared !== null,
+    sharedWith: shared,
+    weekly: (mine || shared !== null) && (taskStatus !== 'done' || doneThisWeek),
   };
 }
 
