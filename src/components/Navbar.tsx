@@ -8,6 +8,7 @@ import {
   CalendarDays,
   CalendarRange,
   ListChecks,
+  NotebookPen,
   Users,
   Wallet,
   Handshake,
@@ -19,7 +20,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/components/ThemeProvider';
 
-export type View = 'home' | 'calendar' | 'events' | 'todo' | 'team' | 'finance' | 'external';
+export type View = 'home' | 'calendar' | 'events' | 'minutes' | 'todo' | 'team' | 'finance' | 'external';
 
 interface NavbarProps {
   currentView: View;
@@ -30,6 +31,7 @@ const navItems: { id: View; label: string; icon: typeof Home }[] = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'calendar', label: 'Calendar', icon: CalendarDays },
   { id: 'events', label: 'Events', icon: CalendarRange },
+  { id: 'minutes', label: 'Meeting Minutes', icon: NotebookPen },
   { id: 'todo', label: 'Weekly To-Do', icon: ListChecks },
   { id: 'team', label: 'Team', icon: Users },
   { id: 'finance', label: 'Finance', icon: Wallet },
@@ -66,7 +68,7 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
 
         {/* Desktop navigation — plain text links, active one underlined */}
         <nav className="hidden h-full flex-1 lg:block">
-          <ul className="flex h-full items-stretch gap-5 xl:gap-6">
+          <ul className="flex h-full items-stretch gap-4 xl:gap-6">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = currentView === item.id;
@@ -82,7 +84,7 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
                     )}
                     aria-current={active ? 'page' : undefined}
                   >
-                    <Icon className="hidden h-3.5 w-3.5 shrink-0 opacity-60 xl:block" />
+                    <Icon className="hidden h-3.5 w-3.5 shrink-0 opacity-60 2xl:block" />
                     {item.label}
                   </button>
                 </li>

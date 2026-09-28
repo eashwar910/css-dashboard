@@ -5,6 +5,7 @@ import { Navbar, type View } from '@/components/Navbar';
 import { HomeView } from '@/components/views/HomeView';
 import { CalendarView, EventsView } from '@/components/views/CalendarView';
 import { TasksView } from '@/components/views/TasksView';
+import { MeetingsView } from '@/components/views/MeetingsView';
 import { TeamView } from '@/components/views/TeamView';
 import { FinanceView } from '@/components/views/FinanceView';
 import { ExternalRelationsView } from '@/components/views/ExternalRelationsView';
@@ -45,6 +46,7 @@ function Dashboard() {
           {view === 'home' && <HomeView onNavigate={setView} />}
           {view === 'calendar' && <CalendarView />}
           {view === 'events' && <EventsView />}
+          {view === 'minutes' && <MeetingsView />}
           {view === 'todo' && <TasksView />}
           {view === 'team' && <TeamView />}
           {view === 'finance' && <FinanceView />}

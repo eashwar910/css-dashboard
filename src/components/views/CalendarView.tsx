@@ -51,7 +51,6 @@ import {
   X as XIcon,
   DollarSign,
   CheckSquare,
-  ExternalLink,
   FileCheck2,
 } from 'lucide-react';
 import type { Event, EventStatus, EventTodoItem, Task } from '@/lib/types';
@@ -64,6 +63,7 @@ import { useTasks } from '@/hooks/useTasks';
 import { TbaTag } from '@/components/TbaTag';
 import { AddEventDialog } from '@/components/AddEventDialog';
 import { EpfPanel } from '@/components/EpfPanel';
+import { EventOverview } from '@/components/EventOverview';
 import { useEpfs } from '@/hooks/useEpfs';
 import {
   eventEnd,
@@ -895,22 +895,12 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
             )}
 
             {/* ── Tab Panels ── */}
-            <div className="space-y-6 pt-2 text-sm min-h-[180px]">
+            <div className="min-w-0 space-y-6 pt-2 text-sm min-h-[180px]">
 
               {/* ── OVERVIEW TAB ── */}
               {eventDetailTab === 'overview' && (
                 <>
-                  {activeSelectedEvent.notionUrl && (
-                    <a
-                      href={activeSelectedEvent.notionUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      Open in Notion
-                    </a>
-                  )}
+                  <EventOverview eventId={activeSelectedEvent.id} notionUrl={activeSelectedEvent.notionUrl} />
                   {EVENT_FEATURES.description && activeSelectedEvent.description && (
                     <div className="space-y-1.5">
                       <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">

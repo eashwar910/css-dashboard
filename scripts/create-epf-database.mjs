@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// One-off setup: create the "Event Planning Forms" database on the Notion
+// One-off setup: create the "Event Proposal Forms" database on the Notion
 // Documents page. Each row is one EPF file, linked to one row of Events.
 // It's a separate database from Documents so EPFs never appear in Quick Access.
 //
@@ -12,7 +12,7 @@ import { Client } from '@notionhq/client'
 const NOTION_VERSION = '2026-03-11'
 /** Team Dashboard > Documents */
 const DOCUMENTS_PAGE_ID = '382a80c6-3b0a-80f3-ae3d-d4f47281e9cd'
-const TITLE = 'Event Planning Forms'
+const TITLE = 'Event Proposal Forms'
 
 const token = process.env.NOTION_TOKEN
 const eventsDataSourceId = process.env.NOTION_EVENTS_DS_ID
@@ -33,7 +33,7 @@ if (existing) {
 const db = await notion.databases.create({
   parent: { type: 'page_id', page_id: DOCUMENTS_PAGE_ID },
   title: [{ type: 'text', text: { content: TITLE } }],
-  description: [{ type: 'text', text: { content: 'EPF documents, one per event. Uploaded from the dashboard.' } }],
+  description: [{ type: 'text', text: { content: 'Event Proposal Forms (EPF), one per event. Uploaded from the dashboard.' } }],
   is_inline: true,
   icon: { type: 'emoji', emoji: '📋' },
   initial_data_source: {

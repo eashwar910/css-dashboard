@@ -4,20 +4,36 @@ import type { CommitteeMember } from './auth.js';
 import { cached, notion } from './notion.js';
 import { committeeNotionEmails } from './supabaseAdmin.js';
 
-/** lowercased email → Notion user id, for every person in the workspace. Cached 60s. */
-async function userIdsByEmail(): Promise<Map<string, string>> {
-  return cached('users:byEmail', async () => {
-    const map = new Map<string, string>();
+type NotionUser = Awaited<ReturnType<ReturnType<typeof notion>['users']['list']>>['results'][number];
+
+/** Every user in the workspace. Cached 60s. */
+async function allUsers(): Promise<NotionUser[]> {
+  return cached('users:all', async () => {
+    const users: NotionUser[] = [];
     let cursor: string | undefined;
     do {
       const res = await notion().users.list({ start_cursor: cursor, page_size: 100 });
-      for (const user of res.results) {
-        if (user.type === 'person' && user.person?.email) map.set(user.person.email.toLowerCase(), user.id);
-      }
+      users.push(...res.results);
       cursor = res.has_more ? res.next_cursor ?? undefined : undefined;
     } while (cursor);
-    return map;
+    return users;
   });
+}
+
+/** lowercased email → Notion user id, for every person in the workspace. */
+async function userIdsByEmail(): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  for (const user of await allUsers()) {
+    if (user.type === 'person' && user.person?.email) map.set(user.person.email.toLowerCase(), user.id);
+  }
+  return map;
+}
+
+/** Notion user id → display name, for rendering @mentions. */
+export async function userNamesById(): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  for (const user of await allUsers()) if (user.name) map.set(user.id, user.name);
+  return map;
 }
 
 /** The Notion user id for an email (case-insensitive), or null if nobody matches. */

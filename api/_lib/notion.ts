@@ -14,7 +14,7 @@ const DATA_SOURCE_ENV = {
   exco: 'NOTION_EXCO_DS_ID',
   documents: 'NOTION_DOCUMENTS_DS_ID',
   transactions: 'NOTION_TRANSACTIONS_DS_ID',
-  contacts: 'NOTION_CONTACTS_DS_ID',
+  externalRelations: 'NOTION_EXTERNAL_RELATIONS_DS_ID',
   epf: 'NOTION_EPF_DS_ID',
 } as const;
 

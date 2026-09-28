@@ -22,7 +22,7 @@ export function EpfPanel({ eventId }: { eventId: string }) {
     setUploading(true);
     try {
       await uploadEpf(eventId, file);
-      toast({ title: 'EPF uploaded', description: 'Saved to Event Planning Forms in Notion.' });
+      toast({ title: 'EPF uploaded', description: 'Saved to Event Proposal Forms in Notion.' });
     } catch (err) {
       toast({ title: "Couldn't upload EPF", description: (err as Error).message, variant: 'destructive' });
     } finally {
@@ -35,7 +35,7 @@ export function EpfPanel({ eventId }: { eventId: string }) {
       <div className="flex items-center justify-between gap-3">
         <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           <FileCheck2 className="h-3.5 w-3.5" />
-          Event Planning Form
+          Event Proposal Form
         </p>
         <button
           type="button"

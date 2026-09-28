@@ -5,7 +5,7 @@ import { createApiStore } from '@/lib/apiStore';
 // ─────────────────────────────────────────────────────────────────────────────
 // useEpfs
 //
-// Event Planning Forms from GET /api/epf (Notion: Documents > Event Planning
+// Event Proposal Forms from GET /api/epf (Notion: Documents > Event Proposal
 // Forms), shared across the Events list, event dialog and Add Event form.
 // uploadEpf saves a file to Notion linked to an event.
 // ─────────────────────────────────────────────────────────────────────────────

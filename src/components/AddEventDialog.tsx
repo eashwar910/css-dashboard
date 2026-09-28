@@ -283,7 +283,7 @@ export function AddEventDialog({ open, onOpenChange, onCreate }: AddEventDialogP
               className="h-9 text-xs file:mr-3 file:text-xs"
             />
             <p className={cn('text-[11px]', epfTooBig ? 'text-destructive' : 'text-muted-foreground')}>
-              {epfTooBig ? 'That file is over 4 MB.' : 'Up to 4 MB. Saved to Event Planning Forms in Notion, linked to this event.'}
+              {epfTooBig ? 'That file is over 4 MB.' : 'Up to 4 MB. Saved to Event Proposal Forms in Notion, linked to this event.'}
             </p>
           </div>
 

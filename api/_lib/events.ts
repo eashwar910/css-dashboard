@@ -2,8 +2,10 @@
 // Meetings are not events: they get kind 'meeting' and no status.
 
 import type { PageObjectResponse } from '@notionhq/client';
-import { cached, dataSourceId, queryAll } from './notion.js';
+import { cached, dataSourceId, notion, queryAll } from './notion.js';
 import { date, richText, select, status, title, type DateValue } from './props.js';
+import { toDisplayMarkdown } from './notionMarkdown.js';
+import { userNamesById } from './users.js';
 
 export type EventStatusDto = 'scheduled' | 'planning-in-progress' | 'done';
 
@@ -81,4 +83,26 @@ export async function meetingPages(): Promise<PageObjectResponse[]> {
 export async function loadCalendarItems(): Promise<CalendarItemDto[]> {
   const [events, meetings] = await Promise.all([eventPages(), meetingPages()]);
   return [...events.map(toEvent), ...meetings.map(toMeeting)].sort(compareCalendarItems);
+}
+
+export interface CalendarItemContentDto {
+  /** The page body as GitHub-flavoured Markdown ('' when the page is empty). */
+  markdown: string;
+  /** True when Notion cut the page short; the dashboard links to Notion for the rest. */
+  truncated: boolean;
+}
+
+/**
+ * The page body of an event or meeting. Returns null if the id isn't a live
+ * row of either database, so arbitrary Notion pages can't be read through this.
+ */
+export async function loadCalendarItemContent(id: string): Promise<CalendarItemContentDto | null> {
+  // The cached lists (shared with GET /api/events) are enough to check membership
+  const [events, meetings] = await Promise.all([eventPages(), meetingPages()]);
+  const source = events.some((p) => p.id === id) ? 'events' : meetings.some((p) => p.id === id) ? 'meetings' : null;
+  if (!source) return null;
+  return cached(`${source}:content:${id}`, async () => {
+    const [res, names] = await Promise.all([notion().pages.retrieveMarkdown({ page_id: id }), userNamesById()]);
+    return { markdown: toDisplayMarkdown(res.markdown, names), truncated: res.truncated };
+  });
 }

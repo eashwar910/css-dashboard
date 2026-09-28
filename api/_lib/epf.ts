@@ -1,4 +1,4 @@
-// Team Dashboard > Documents > Event Planning Forms → EPFs, one row per file,
+// Team Dashboard > Documents > Event Proposal Forms → EPFs, one row per file,
 // each linked to one row of Events. Kept apart from Documents so EPFs never
 // appear in Quick Access. Created by scripts/create-epf-database.mjs.
 
