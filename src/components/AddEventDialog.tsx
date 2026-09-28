@@ -3,7 +3,6 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -17,6 +16,8 @@ import { useToast } from '@/hooks/use-toast';
 import type { NewEvent } from '@/hooks/useEvents';
 import { MAX_EPF_BYTES, useEpfs } from '@/hooks/useEpfs';
 import type { Event, EventStatus } from '@/lib/types';
+import { EventWhenFields } from '@/components/EventWhenFields';
+import { buildTimeline, EMPTY_WHEN, type WhenValue } from '@/lib/eventWhen';
 
 interface AddEventDialogProps {
   open: boolean;
@@ -31,27 +32,12 @@ const STATUS_OPTIONS: { value: EventStatus; label: string }[] = [
   { value: 'done', label: 'Done' },
 ];
 
-/** "2026-10-01" + "18:30" → "2026-10-01T18:30:00+08:00", using this browser's timezone on that date. */
-function toOffsetDateTime(date: string, time: string): string {
-  const offsetMin = -new Date(`${date}T${time}:00`).getTimezoneOffset();
-  const sign = offsetMin >= 0 ? '+' : '-';
-  const abs = Math.abs(offsetMin);
-  const hh = String(Math.floor(abs / 60)).padStart(2, '0');
-  const mm = String(abs % 60).padStart(2, '0');
-  return `${date}T${time}:00${sign}${hh}:${mm}`;
-}
-
 /** Create an event in the Notion Events database. */
 export function AddEventDialog({ open, onOpenChange, onCreate }: AddEventDialogProps) {
   const { toast } = useToast();
   const { uploadEpf } = useEpfs();
   const [title, setTitle] = useState('');
-  const [tba, setTba] = useState(false);
-  const [allDay, setAllDay] = useState(false);
-  const [startDate, setStartDate] = useState('');
-  const [startTime, setStartTime] = useState('18:00');
-  const [endDate, setEndDate] = useState('');
-  const [endTime, setEndTime] = useState('');
+  const [when, setWhen] = useState<WhenValue>(EMPTY_WHEN);
   const [location, setLocation] = useState('');
   const [status, setStatus] = useState<EventStatus>('scheduled');
   const [epfFile, setEpfFile] = useState<File | null>(null);
@@ -59,12 +45,7 @@ export function AddEventDialog({ open, onOpenChange, onCreate }: AddEventDialogP
 
   const reset = () => {
     setTitle('');
-    setTba(false);
-    setAllDay(false);
-    setStartDate('');
-    setStartTime('18:00');
-    setEndDate('');
-    setEndTime('');
+    setWhen(EMPTY_WHEN);
     setLocation('');
     setStatus('scheduled');
     setEpfFile(null);
@@ -76,24 +57,7 @@ export function AddEventDialog({ open, onOpenChange, onCreate }: AddEventDialogP
     onOpenChange(next);
   };
 
-  /** Build Notion's start/end, or an error message for the form. */
-  const timeline = ((): { start: string | null; end: string | null } | string => {
-    if (tba) return { start: null, end: null };
-    if (!startDate) return 'Pick a start date, or mark the date as TBA.';
-    if (allDay) {
-      if (endDate && endDate < startDate) return 'The end date is before the start date.';
-      return { start: startDate, end: endDate && endDate !== startDate ? endDate : null };
-    }
-    if (!startTime) return 'Pick a start time, or tick "All day".';
-    const start = toOffsetDateTime(startDate, startTime);
-    // An end time with no end date means the same day
-    if (!endTime && !endDate) return { start, end: null };
-    if (!endTime) return 'Pick an end time too.';
-    const end = toOffsetDateTime(endDate || startDate, endTime);
-    if (Date.parse(end) <= Date.parse(start)) return 'The end is before the start.';
-    return { start, end };
-  })();
-
+  const timeline = buildTimeline(when);
   const timelineError = typeof timeline === 'string' ? timeline : null;
   const epfTooBig = epfFile !== null && epfFile.size > MAX_EPF_BYTES;
   const canSave = title.trim() !== '' && timelineError === null && !epfTooBig && !saving;
@@ -141,7 +105,7 @@ export function AddEventDialog({ open, onOpenChange, onCreate }: AddEventDialogP
             Add event
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Saved to the Events database in Notion, so it shows up in Calendar, Events and Home.
+            Saved to the Events database in Notion, so it shows up in Events and Home.
           </DialogDescription>
         </DialogHeader>
 
@@ -160,79 +124,7 @@ export function AddEventDialog({ open, onOpenChange, onCreate }: AddEventDialogP
             />
           </div>
 
-          {/* When */}
-          <fieldset className="space-y-3">
-            <legend className="mb-1.5 text-xs font-medium">When</legend>
-            <div className="flex flex-wrap gap-x-6 gap-y-2">
-              <label className="flex cursor-pointer items-center gap-2 text-xs">
-                <Checkbox checked={tba} onCheckedChange={(v) => setTba(v === true)} />
-                Date TBA
-              </label>
-              <label className={cn('flex items-center gap-2 text-xs', tba ? 'opacity-50' : 'cursor-pointer')}>
-                <Checkbox checked={allDay} disabled={tba} onCheckedChange={(v) => setAllDay(v === true)} />
-                All day
-              </label>
-            </div>
-
-            {!tba && (
-              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="event-start-date" className="text-xs">Start date *</Label>
-                  <Input
-                    id="event-start-date"
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    style={{ borderRadius: 0 }}
-                  />
-                </div>
-                {!allDay ? (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="event-start-time" className="text-xs">Start time *</Label>
-                    <Input
-                      id="event-start-time"
-                      type="time"
-                      value={startTime}
-                      onChange={(e) => setStartTime(e.target.value)}
-                      style={{ borderRadius: 0 }}
-                    />
-                  </div>
-                ) : (
-                  <div />
-                )}
-                <div className="space-y-1.5">
-                  <Label htmlFor="event-end-date" className="text-xs">
-                    End date <span className="text-muted-foreground">(optional)</span>
-                  </Label>
-                  <Input
-                    id="event-end-date"
-                    type="date"
-                    value={endDate}
-                    min={startDate || undefined}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    style={{ borderRadius: 0 }}
-                  />
-                </div>
-                {!allDay && (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="event-end-time" className="text-xs">
-                      End time <span className="text-muted-foreground">(optional)</span>
-                    </Label>
-                    <Input
-                      id="event-end-time"
-                      type="time"
-                      value={endTime}
-                      onChange={(e) => setEndTime(e.target.value)}
-                      style={{ borderRadius: 0 }}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-            {timelineError && (startDate || endDate || endTime) && (
-              <p className="text-[11px] text-destructive">{timelineError}</p>
-            )}
-          </fieldset>
+          <EventWhenFields value={when} onChange={setWhen} idPrefix="event" />
 
           {/* Location */}
           <div className="space-y-1.5">

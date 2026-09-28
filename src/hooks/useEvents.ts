@@ -9,9 +9,10 @@ import { apiFetch } from '@/lib/api';
 // Shared event store
 //
 // Single source of truth across views (Calendar & Events, Home, search),
-// loaded from GET /api/events (Notion Events + Meetings). createEvent saves
-// to Notion (POST /api/events). The other mutation functions only change this
-// in-memory copy, so the UI hides them (EVENT_FEATURES.editing).
+// loaded from GET /api/events (Notion Events only; meetings are useMeetings).
+// createEvent (POST) and saveEvent (PATCH) save to Notion. addEvent, rsvpEvent,
+// removeEvent and updateEvent only change this in-memory copy, so the UI hides
+// them (EVENT_FEATURES).
 // ─────────────────────────────────────────────────────────────────────────────
 
 type EventDto = EventsResponse['events'][number];
@@ -19,7 +20,6 @@ type EventDto = EventsResponse['events'][number];
 interface EventsResponse {
   events: {
     id: string;
-    kind: 'event' | 'meeting';
     title: string;
     start: string | null;
     end: string | null;
@@ -33,14 +33,13 @@ interface EventsResponse {
 function toEvent(dto: EventDto): Event {
   return {
     id: dto.id,
-    kind: dto.kind,
     title: dto.title,
     description: '',
     startDateTime: dto.start ?? undefined,
     endDateTime: dto.end ?? undefined,
     allDay: dto.allDay,
     location: dto.location ?? undefined,
-    category: dto.kind === 'meeting' ? 'meeting' : 'other',
+    category: 'other',
     agenda: [],
     rsvpCount: 0,
     status: dto.status ?? undefined,
@@ -61,19 +60,28 @@ export interface NewEvent {
   status: EventStatus;
 }
 
+/** Date/time and location edits. start null = TBA; send start and end together. */
+export interface EventEdit {
+  start?: string | null;
+  end?: string | null;
+  location?: string | null;
+}
+
 export interface EventsResult extends AsyncResult<Event[]> {
-  /** Dated events and meetings that aren't over yet (sorted ascending). */
+  /** Dated events that aren't over yet (sorted ascending). */
   upcoming: Event[];
   /** Events with no date yet ("TBA"), sorted by title. */
   tba: Event[];
   /** Dated events starting within the given month. TBA events are never included. */
   forMonth: (year: number, month: number) => Event[];
-  /** Events grouped by category (derived from kind: 'meeting' or 'other'). */
+  /** Events grouped by category (always 'other': Notion has no category). */
   byCategory: Record<EventCategory, Event[]>;
   /** Add an event to the in-memory store (not saved to Notion). */
   addEvent: (event: Omit<Event, 'id'> & { id?: string }) => Event;
   /** Create an event in Notion and add it to the shared store. */
   createEvent: (input: NewEvent) => Promise<Event>;
+  /** Save date/time and/or location to Notion and update the shared store. */
+  saveEvent: (id: string, edit: EventEdit) => Promise<Event>;
   /** Increment the RSVP count in memory (not saved to Notion). */
   rsvpEvent: (id: string) => void;
   /** Remove an event from the in-memory store (not saved to Notion). */
@@ -106,6 +114,16 @@ export function useEvents(): EventsResult {
     });
     const event = toEvent(dto);
     store.update((events) => [event, ...events]);
+    return event;
+  }, []);
+
+  const saveEvent = useCallback(async (id: string, edit: EventEdit): Promise<Event> => {
+    const { event: dto } = await apiFetch<{ event: EventDto }>(`events?id=${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(edit),
+    });
+    const event = toEvent(dto);
+    store.update((events) => events.map((e) => (e.id === id ? event : e)));
     return event;
   }, []);
 
@@ -161,6 +179,7 @@ export function useEvents(): EventsResult {
     byCategory,
     addEvent,
     createEvent,
+    saveEvent,
     rsvpEvent,
     removeEvent,
     deleteEvent: removeEvent,

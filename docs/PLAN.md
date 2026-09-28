@@ -27,9 +27,9 @@ This file holds the decisions for connecting the dashboard to Notion. `NOTION_MA
 ## Data sources in use
 | Dashboard section | Notion data source | Data source ID | Env var |
 |---|---|---|---|
-| Tasks, weekly scrum, event to-dos | Team Dashboard > Tasks | `382a80c6-3b0a-80d3-8b35-000b68a5e907` | `NOTION_TASKS_DS_ID` |
+| Tasks, Weekly tab, event to-dos | Team Dashboard > Tasks | `382a80c6-3b0a-80d3-8b35-000b68a5e907` | `NOTION_TASKS_DS_ID` |
 | Events | Team Dashboard > Events | `382a80c6-3b0a-80ae-8ff7-000b7e904f97` | `NOTION_EVENTS_DS_ID` |
-| Meetings (on the calendar) | Team Dashboard > Meetings | `382a80c6-3b0a-8179-9c4d-000b5b12fca0` | `NOTION_MEETINGS_DS_ID` |
+| Meetings tab | Team Dashboard > Meetings | `382a80c6-3b0a-8179-9c4d-000b5b12fca0` | `NOTION_MEETINGS_DS_ID` |
 | Team | Computer Science Society > Executive Committee (ExCo) | `381a80c6-3b0a-80c0-8fdf-000b433f267f` | `NOTION_EXCO_DS_ID` |
 | Documents | Team Dashboard > Documents > Documents (1) | `382a80c6-3b0a-8114-af2d-000b723f3007` | `NOTION_DOCUMENTS_DS_ID` |
 | Finance | Finance Tracker > Transactions | `3e7a80c6-3b0a-8007-87dd-000b20131ed1` | `NOTION_TRANSACTIONS_DS_ID` |
@@ -37,28 +37,29 @@ This file holds the decisions for connecting the dashboard to Notion. `NOTION_MA
 The integration is `css-dashboard`, an internal connection using an API token. It can read, update and insert content, and read user emails. Everything else it can see is ignored. `NOTION_MAPPING.md` §8 lists those data sources and why.
 
 ## Events and meetings
-- The canonical events list is Team Dashboard > Events:
-  - `Name` → title
-  - `Timeline` (date range) → start/end
-  - `Location` (text) → location
+Restructured 2026-09-29 after the President's review (`scripts/restructure-meetings-and-weeks.mjs`). Tabs: Home, Weekly, Events, Meetings, Team, Finance, External Relations. There is no Calendar tab; Events and Meetings each have a List / Calendar switch, and each calendar shows only its own items.
+
+**Events tab** reads only Team Dashboard > Events (`/api/events`):
+- `Name` → title, `Timeline` (date range) → start/end, `Location` (text) → location.
 - Status mapping: Not started → `scheduled`, In progress → `planning-in-progress`, Done → `done`.
-- **An event with no date shows a "TBA" tag.** TBA events appear in the list view and the sidebar, since the month grid can't place them. Most events have no date yet, so this is the normal case.
-- **Meetings are not events.** Add `kind: 'event' | 'meeting'`.
-  - Meetings appear on the calendar with their own label and colour, and no status badge. So `status` becomes optional.
-  - Meeting mapping: `Task` → title, `Date` → start/end, `Venue` → location.
+- **An event with no date shows a "TBA" tag.** TBA events appear in the list; the month calendar can't place them and says how many are missing.
+- **Upcoming and TBA events are editable** from the event dialog, by any committee member:
+  - Overview = the Notion page body. The editor edits Notion's own Markdown and saves it with `PUT /api/event-content` (`pages.updateMarkdown`, `replace_content`). The client sends the Markdown it started from as `base`; if the page changed in Notion since, the server answers 409 instead of overwriting. Child pages/databases are never deleted, and pages too long to read in full are edit-in-Notion only.
+  - Date/time (or TBA) and Location save with `PATCH /api/events?id=`.
 - Hide agenda, RSVP and description in the UI for now, but don't delete the components.
-- `startDateTime` and `dueDate` become optional. Fix every unguarded `parseISO` and every other unguarded date use.
 
-## Tasks and weekly scrum to-dos
-- Weekly scrum to-dos are per-person, per-event to-do items that get reviewed and checked off weekly. They are rows in Tasks.
-- `PIC` (people) is the owner of each to-do, not of the event. `Events` (relation) links the to-do to its event.
-- The weekly view shows:
-  - the logged-in user's tasks (those whose PIC includes them), grouped by linked event, with "General" for tasks that have no event;
-  - then a **"Shared"** group with every task whose PIC has no individual person (only groups such as "Everyone" or a department, or nobody). Each shared task shows its group name, or "Unassigned" if PIC is empty. Every member sees these.
+**Meetings tab** reads only Team Dashboard > Meetings (`/api/meetings`). Meetings never appear in Events or on Home.
+- `Name` → title, `Date` → start/end (a datetime carries the time), `Venue` → location, `Type` (JC / ExCo / Weekly Meeting), `Created By` (people, set by the dashboard). Minutes are the page body.
+- **Upcoming Meetings**: not over yet, soonest first, plus TBA meetings. **Meeting Minutes**: over, most recent first. A meeting moves across automatically once its end (or its day, if it has no time) has passed. There is no status property to go stale.
+- The President, Vice President, Secretary and Head of Tech (ExCo `Position` or `committee_members.role`, see `api/_lib/roles.ts`) can add a meeting: title, date, time (Malaysia) and optional notes, which become the page body. Nothing is recurring; the weekly meeting is added like any other.
 
-  In both, it includes:
-  - tasks not yet Done
-  - Done tasks whose `last_edited_time` falls in the current week
+## Tasks and the Weekly tab
+- Weekly to-dos are rows in Tasks. `PIC` (people) is the owner of each to-do. `Events` (relation) links it to an event. `Week` (date) is the Monday of the week it was planned for.
+- The Weekly tab shows **everyone's** to-dos, grouped by PIC person (a task with several PICs appears under each; the signed-in member first), then PIC groups such as "Marketing Department", then "Unassigned".
+  - **This week**: `Week` is this week, plus anything still open from an earlier week (marked "From an earlier week") or with no `Week`.
+  - **Last week**: `Week` is last week, Done or not.
+  - Weeks are Asia/Kuala_Lumpur, starting Monday.
+- A task created from the dashboard gets `Week` = this week. Ticking a task with no `Week` sets it to this week.
 - Ticking a task sets Status to Done. Unticking sets it back to Not started.
 - Event detail to-dos are the Tasks linked to that event.
 - A to-do created from the dashboard gets PIC = the creator, and links to the event if it was created from one. The creator's Notion user id is looked up by email via `notion.users.list`, cached.

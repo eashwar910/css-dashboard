@@ -272,7 +272,7 @@ export function AddTransactionForm({ eventId }: { eventId?: string }) {
               <SelectTrigger style={{ borderRadius: 0 }} className={selectClass}><SelectValue /></SelectTrigger>
               <SelectContent style={{ borderRadius: 0 }}>
                 <SelectItem value={NO_EVENT}>No event</SelectItem>
-                {events.filter((ev) => ev.kind === 'event').map((ev) => (
+                {events.map((ev) => (
                   <SelectItem key={ev.id} value={ev.id}>{ev.title}</SelectItem>
                 ))}
               </SelectContent>

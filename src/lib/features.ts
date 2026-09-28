@@ -13,9 +13,10 @@ export const EVENT_FEATURES = {
   /** Free-text event description. */
   description: false,
   /**
-   * Add / delete events, edit dates and change status from the dashboard.
-   * Off because these only changed browser memory: Notion is the source of
-   * truth and there is no event write endpoint, so edits would silently vanish.
+   * Delete events and change their status from the dashboard. Off because
+   * these only change browser memory, so edits would silently vanish.
+   * (Adding events, and editing an upcoming event's date, location and
+   * Overview, do save to Notion and are always on.)
    */
   editing: false,
 } as const;

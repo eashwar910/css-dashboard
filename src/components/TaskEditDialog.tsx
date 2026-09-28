@@ -31,9 +31,8 @@ const NO_EVENT = 'none';
  */
 export function TaskEditDialog({ task, onOpenChange }: { task: Task | null; onOpenChange: (open: boolean) => void }) {
   const { editTask, deleteTask } = useTasks();
-  const { data: allEvents } = useEvents();
+  const { data: events } = useEvents();
   const { toast } = useToast();
-  const events = allEvents.filter((e) => e.kind === 'event');
 
   const [title, setTitle] = useState('');
   const [dueDate, setDueDate] = useState('');

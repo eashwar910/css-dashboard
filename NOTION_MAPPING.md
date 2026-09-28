@@ -1,5 +1,7 @@
 # Notion → Dashboard Mapping Plan
 
+> **2026-09-29 restructure** (`scripts/restructure-meetings-and-weeks.mjs`): Meetings' title `Task` was renamed `Name` and `Created By` (people) was added; Tasks gained `Week` (date). Meetings are no longer shown as events. `docs/PLAN.md` → "Events and meetings" and "Tasks and the Weekly tab" have the current rules; the survey below predates this.
+
 Survey run: 2026-09-26 (re-run twice the same day: after Transactions was added, then after the Notion fixes) · `node scripts/notion-survey.mjs` · Notion API `2026-03-11` · `@notionhq/client` 5.26.0
 Raw output: `notion-survey.json` (gitignored, contains member data). This file lists schema and counts only, never member data.
 

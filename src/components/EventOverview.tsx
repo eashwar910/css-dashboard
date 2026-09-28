@@ -4,14 +4,21 @@ import remarkBreaks from 'remark-breaks';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import type { Processor } from 'unified';
-import { AlertCircle, ExternalLink } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertCircle, Check, ExternalLink, Loader2, Pencil } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useApiResource } from '@/hooks/useApiResource';
+import { apiFetch } from '@/lib/api';
 
 interface EventContentResponse {
   markdown: string;
+  /** Notion's own Markdown; only sent for events, which are editable. */
+  source?: string;
   truncated: boolean;
 }
+
+type SaveState = { kind: 'idle' } | { kind: 'saving' } | { kind: 'saved' } | { kind: 'error'; message: string };
 
 /**
  * Notion indents child blocks with tabs and always fences real code with ```,
@@ -60,9 +67,47 @@ const components: Components = {
   td: ({ children }) => <td className="border border-border px-2.5 py-1.5 align-top [overflow-wrap:anywhere]">{children}</td>,
 };
 
-/** The event's Notion page content, rendered in place of an "Open in Notion" link. */
-export function EventOverview({ eventId, notionUrl }: { eventId: string; notionUrl?: string }) {
-  const { data, isLoading, error } = useApiResource<EventContentResponse>(`event-content?id=${encodeURIComponent(eventId)}`);
+interface EventOverviewProps {
+  eventId: string;
+  notionUrl?: string;
+  /** Show "Edit Overview" (upcoming and TBA events). Saves to the Notion page body. */
+  editable?: boolean;
+}
+
+/** The event's (or meeting's) Notion page content, rendered in place of an "Open in Notion" link. */
+export function EventOverview({ eventId, notionUrl, editable = false }: EventOverviewProps) {
+  const { data: loaded, isLoading, error } = useApiResource<EventContentResponse>(`event-content?id=${encodeURIComponent(eventId)}`);
+  // The last saved version replaces what was loaded, so a save shows at once
+  const [saved, setSaved] = useState<EventContentResponse | null>(null);
+  const data = saved ?? loaded;
+  const [draft, setDraft] = useState<string | null>(null);
+  const [save, setSave] = useState<SaveState>({ kind: 'idle' });
+
+  // "Saved" fades after a few seconds
+  useEffect(() => {
+    if (save.kind !== 'saved') return;
+    const timer = setTimeout(() => setSave({ kind: 'idle' }), 3000);
+    return () => clearTimeout(timer);
+  }, [save]);
+
+  const canEdit = editable && data?.source !== undefined && !data.truncated;
+
+  const handleSave = async () => {
+    if (draft === null || data?.source === undefined) return;
+    setSave({ kind: 'saving' });
+    try {
+      const result = await apiFetch<EventContentResponse>(`event-content?id=${encodeURIComponent(eventId)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ markdown: draft, base: data.source }),
+      });
+      setSaved(result);
+      setDraft(null);
+      setSave({ kind: 'saved' });
+    } catch (err) {
+      // Keep the draft so nothing typed is lost
+      setSave({ kind: 'error', message: (err as Error).message });
+    }
+  };
 
   const notionLink = notionUrl && (
     <a
@@ -92,9 +137,54 @@ export function EventOverview({ eventId, notionUrl }: { eventId: string; notionU
       <div className="space-y-3">
         <p className="flex items-center gap-2 text-xs text-destructive">
           <AlertCircle className="h-4 w-4 shrink-0" />
-          Couldn't load this event's page — try reopening it.
+          Couldn't load this page — try reopening it.
         </p>
         {notionLink}
+      </div>
+    );
+  }
+
+  if (draft !== null) {
+    const saving = save.kind === 'saving';
+    return (
+      <div className="min-w-0 space-y-3">
+        <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground" htmlFor={`overview-${eventId}`}>
+          Overview (Markdown, saved to the event's Notion page)
+        </label>
+        <textarea
+          id={`overview-${eventId}`}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          disabled={saving}
+          rows={12}
+          style={{ borderRadius: 0 }}
+          className="w-full resize-y border border-border bg-background p-3 font-mono text-xs leading-relaxed text-foreground focus:border-primary focus:outline-none disabled:opacity-60"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" size="sm" style={{ borderRadius: 0 }} onClick={handleSave} disabled={saving || draft === data.source}>
+            {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            style={{ borderRadius: 0 }}
+            disabled={saving}
+            onClick={() => {
+              setDraft(null);
+              setSave({ kind: 'idle' });
+            }}
+          >
+            Cancel
+          </Button>
+          {save.kind === 'error' && (
+            <span role="alert" className="flex items-center gap-1.5 text-xs text-destructive">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              Not saved: {save.message}
+            </span>
+          )}
+        </div>
       </div>
     );
   }
@@ -108,10 +198,31 @@ export function EventOverview({ eventId, notionUrl }: { eventId: string; notionU
           </ReactMarkdown>
         </div>
       ) : (
-        <p className="text-xs italic text-muted-foreground">Nothing written on this event's Notion page yet.</p>
+        <p className="text-xs italic text-muted-foreground">Nothing written on this page yet.</p>
       )}
       {data.truncated && <p className="text-xs text-muted-foreground">This page is long, so only the start is shown.</p>}
-      {notionLink}
+      <div className="flex flex-wrap items-center gap-4">
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => {
+              setDraft(data.source ?? '');
+              setSave({ kind: 'idle' });
+            }}
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-primary"
+          >
+            <Pencil className="h-3 w-3" />
+            Edit Overview
+          </button>
+        )}
+        {notionLink}
+        {save.kind === 'saved' && (
+          <span role="status" className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+            <Check className="h-3.5 w-3.5" />
+            Saved to Notion
+          </span>
+        )}
+      </div>
     </div>
   );
 }

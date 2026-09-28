@@ -1,5 +1,5 @@
 // /api/tasks
-//   GET                    every task, flagged mine/shared/weekly, with `can` permissions
+//   GET                    every task, flagged mine/shared and thisWeek/lastWeek, with `can` permissions
 //   POST                   create { title, dueDate?, status?, eventId? } → { task, warning }
 //   PATCH  ?id=<page id>   tick/untick { completed } or edit { title?, dueDate?, status?, eventId? } → { task }
 //   DELETE ?id=<page id>   move to Notion trash → { ok: true }
@@ -22,7 +22,7 @@ export default withHandler(
         const [result, notionUserId] = await Promise.all([loadTasks(member), notionUserIdFor(member)]);
         // notionLinked=false means no Notion user has this member's email, so
         // nothing can be "mine" until committee_members.notion_email is set.
-        sendJson(res, 200, { ...result, notionLinked: notionUserId !== null });
+        sendJson(res, 200, { ...result, notionLinked: notionUserId !== null, notionUserId });
         return;
       }
       case 'POST': {

@@ -30,8 +30,16 @@ export interface TaskDto {
   shared: boolean;
   /** For shared tasks: the PIC group name(s), or "Unassigned". null otherwise. */
   sharedWith: string | null;
-  /** Shown in the weekly scrum view: mine or shared, and not Done or Done this week. */
-  weekly: boolean;
+  /** `Week`: Monday (YYYY-MM-DD, Kuala Lumpur) of the week the to-do was planned for; null if unset. */
+  week: string | null;
+  /** Individual PIC people, for grouping the Weekly tab by person. */
+  assignees: { id: string; name: string }[];
+  /** In the Weekly tab's "This week": planned this week, or still open from an earlier week (or no week). */
+  thisWeek: boolean;
+  /** Open, and planned for an earlier week. */
+  carriedOver: boolean;
+  /** In the Weekly tab's "Last week": planned for last week (Done or not). */
+  lastWeek: boolean;
   /** What the signed-in member may do (ownership.ts). The server re-checks on every write. */
   can: { toggle: boolean; edit: boolean; delete: boolean };
 }
@@ -62,6 +70,23 @@ export function sharedWith(page: PageObjectResponse): string | null {
 const KL_OFFSET_MS = 8 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** Monday (YYYY-MM-DD) of the Kuala Lumpur week containing this instant. */
+export function klMonday(at: Date): string {
+  const kl = new Date(at.getTime() + KL_OFFSET_MS);
+  const monday = Date.UTC(kl.getUTCFullYear(), kl.getUTCMonth(), kl.getUTCDate()) - ((kl.getUTCDay() + 6) % 7) * DAY_MS;
+  return new Date(monday).toISOString().slice(0, 10);
+}
+
+/** Monday of the week a Notion `Week` value falls in (anyone may pick a non-Monday in Notion). */
+function weekOf(value: string | undefined): string | null {
+  if (!value) return null;
+  const day = value.slice(0, 10);
+  const ms = Date.parse(`${day}T00:00:00Z`);
+  if (Number.isNaN(ms)) return null;
+  const weekday = (new Date(ms).getUTCDay() + 6) % 7;
+  return new Date(ms - weekday * DAY_MS).toISOString().slice(0, 10);
+}
+
 export function klWeek(now = new Date()): { start: Date; end: Date } {
   const kl = new Date(now.getTime() + KL_OFFSET_MS); // KL wall-clock time, read via UTC getters
   const daysSinceMonday = (kl.getUTCDay() + 6) % 7;
@@ -89,8 +114,11 @@ export function toTask(
   const eventIds = relationIds(page, 'Events');
   const mine = isMine(page, member);
   const shared = sharedWith(page);
-  const edited = Date.parse(page.last_edited_time);
-  const doneThisWeek = taskStatus === 'done' && edited >= week.start.getTime() && edited < week.end.getTime();
+  const thisMonday = klMonday(week.start);
+  const lastMonday = klMonday(new Date(week.start.getTime() - 7 * DAY_MS));
+  const taskWeek = weekOf(date(page, 'Week')?.start);
+  const open = taskStatus !== 'done';
+  const carriedOver = open && taskWeek !== null && taskWeek < thisMonday;
   return {
     id: page.id,
     title: title(page, 'Task') ?? 'Untitled task',
@@ -102,7 +130,13 @@ export function toTask(
     mine,
     shared: shared !== null,
     sharedWith: shared,
-    weekly: (mine || shared !== null) && (taskStatus !== 'done' || doneThisWeek),
+    week: taskWeek,
+    assignees: people(page, 'PIC')
+      .filter((p) => p.kind === 'person' || p.kind === 'unknown')
+      .map((p) => ({ id: p.id, name: p.name ?? 'Former member' })),
+    thisWeek: taskWeek === thisMonday || (open && (taskWeek === null || taskWeek < thisMonday)),
+    carriedOver,
+    lastWeek: taskWeek === lastMonday,
     can: {
       toggle: canModifyTask(member, page, 'toggle').allowed,
       edit: canModifyTask(member, page, 'edit').allowed,
@@ -138,5 +172,6 @@ export async function loadTasks(member: TaskViewer, now = new Date()) {
     tasks: pages.map((p) => toTask(p, member, eventNames, week)).sort(compareTasks),
     weekStart: week.start.toISOString(),
     weekEnd: week.end.toISOString(),
+    lastWeekStart: new Date(week.start.getTime() - 7 * DAY_MS).toISOString(),
   };
 }

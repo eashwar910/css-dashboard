@@ -1,20 +1,9 @@
 import { useState, useMemo } from 'react';
-import {
-  format,
-  isSameDay,
-  isSameMonth,
-  startOfMonth,
-  endOfMonth,
-  startOfWeek,
-  endOfWeek,
-  eachDayOfInterval,
-  addMonths,
-  subMonths,
-  addDays,
-} from 'date-fns';
+import { format, addDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -37,8 +26,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import {
-  ChevronLeft,
-  ChevronRight,
   Plus,
   Clock,
   MapPin,
@@ -52,6 +39,7 @@ import {
   DollarSign,
   CheckSquare,
   FileCheck2,
+  Loader2,
 } from 'lucide-react';
 import type { Event, EventStatus, EventTodoItem, Task } from '@/lib/types';
 import { useEvents } from '@/hooks/useEvents';
@@ -64,16 +52,11 @@ import { TbaTag } from '@/components/TbaTag';
 import { AddEventDialog } from '@/components/AddEventDialog';
 import { EpfPanel } from '@/components/EpfPanel';
 import { EventOverview } from '@/components/EventOverview';
+import { MonthCalendar, ViewModeToggle } from '@/components/MonthCalendar';
+import { EventWhenFields } from '@/components/EventWhenFields';
+import { buildTimeline, whenFromEvent, type WhenValue } from '@/lib/eventWhen';
 import { useEpfs } from '@/hooks/useEpfs';
-import {
-  eventEnd,
-  eventKindLabel,
-  eventStart,
-  formatEventDate,
-  formatEventTimeRange,
-  isTba,
-  parseDate,
-} from '@/lib/eventDates';
+import { eventEnd, eventStart, formatEventDate, formatEventTimeRange, isTba, isUpcoming } from '@/lib/eventDates';
 
 /** Calendar chip colours, keyed by event progression status. */
 const STATUS_CHIP_CLASSES: Record<EventStatus, string> = {
@@ -82,18 +65,16 @@ const STATUS_CHIP_CLASSES: Record<EventStatus, string> = {
   'done': 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20',
 };
 
-/** Meetings get their own colour and no status. */
-const MEETING_CHIP_CLASSES = 'border-sky-500/30 bg-sky-500/10 text-sky-700 hover:bg-sky-500/20 dark:text-sky-400';
-
-function chipClasses(e: Event) {
-  return e.kind === 'meeting' ? MEETING_CHIP_CLASSES : STATUS_CHIP_CLASSES[e.status ?? 'scheduled'];
-}
-
 const STATUS_LABELS: Record<EventStatus, string> = {
   'scheduled': 'Scheduled',
   'planning-in-progress': 'Planning in Progress',
   'done': 'Done',
 };
+
+/** Upcoming or TBA: its Overview, date and location can be edited from the dashboard. */
+function isEditable(event: Event) {
+  return isTba(event) || isUpcoming(event);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // iCalendar (.ics) export generator
@@ -158,73 +139,36 @@ function downloadIcsFile(event: Event) {
   URL.revokeObjectURL(url);
 }
 
-type CalendarMode = 'month' | 'agenda';
-
-/** Month grid. The chronological list lives in the Events tab (EventsView). */
-export function CalendarView() {
-  return <CalendarEventsView viewMode="month" />;
-}
-
-/** Chronological list of every event, TBA last. */
+/** Society events from Notion: a chronological list (TBA last) or a month calendar. */
 export function EventsView() {
-  return <CalendarEventsView viewMode="agenda" />;
-}
-
-function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
-  const [currentDate, setCurrentDate] = useState(() => startOfMonth(new Date()));
+  const [mode, setMode] = useState<'list' | 'calendar'>('list');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [rsvpedEventIds, setRsvpedEventIds] = useState<Set<string>>(new Set());
   const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
   const { toast } = useToast();
 
   // Data layer hook acts as the single source of truth across the app
-  const { data: allEvents, tba: tbaEvents, isLoading, error, forMonth, createEvent, rsvpEvent, removeEvent, updateEvent } = useEvents();
+  const { data: allEvents, tba: tbaEvents, isLoading, error, createEvent, rsvpEvent, removeEvent, updateEvent } = useEvents();
 
   const { byEvent: epfsByEvent } = useEpfs();
 
   // Event detail dialog tab state
   const [eventDetailTab, setEventDetailTab] = useState<'overview' | 'todo' | 'finance'>('overview');
-  // Edit date mode state
-  const [editingDates, setEditingDates] = useState(false);
-  const [editStartDate, setEditStartDate] = useState('');
-  const [editStartTime, setEditStartTime] = useState('');
-  const [editEndDate, setEditEndDate] = useState('');
-  const [editEndTime, setEditEndTime] = useState('');
+  // Editing the date/time and location
+  const [editingDetails, setEditingDetails] = useState(false);
 
-  // Keep selectedEvent in sync with store changes (e.g. when RSVP count changes or event is deleted)
+  // Keep selectedEvent in sync with store changes (e.g. after an edit or delete)
   const activeSelectedEvent = useMemo(() => {
     if (!selectedEvent) return null;
     return allEvents.find((e) => e.id === selectedEvent.id) || null;
   }, [allEvents, selectedEvent]);
 
-  const monthStart = startOfMonth(currentDate);
-  const monthEnd = endOfMonth(currentDate);
-  const calStart = startOfWeek(monthStart);
-  const calEnd = endOfWeek(monthEnd);
-  const days = eachDayOfInterval({ start: calStart, end: calEnd });
-
-  // Month-specific sorted events for grid and schedule sidebar
-  const monthlySortedEvents = useMemo(
-    () => forMonth(currentDate.getFullYear(), currentDate.getMonth()),
-    [forMonth, currentDate]
-  );
-
-  // All events for the Agenda/List view: already sorted by date, TBA last
-  const allEventsChronological = allEvents;
-
-  const eventsForDay = (day: Date) =>
-    allEvents.filter((e) => {
-      const start = eventStart(e);
-      return start !== null && isSameDay(start, day);
-    });
-
-  const handlePrevMonth = () => setCurrentDate((d) => subMonths(d, 1));
-  const handleNextMonth = () => setCurrentDate((d) => addMonths(d, 1));
-  const handleToday = () => setCurrentDate(startOfMonth(new Date()));
-
-  const eventsForSelected = selectedDate ? eventsForDay(selectedDate) : [];
+  const closeEvent = () => {
+    setSelectedEvent(null);
+    setEventDetailTab('overview');
+    setEditingDetails(false);
+  };
 
   const handleRsvpToggle = (eventId: string) => {
     if (!rsvpedEventIds.has(eventId)) {
@@ -240,27 +184,22 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
       <header className="border-b border-border pb-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="font-serif text-3xl font-semibold leading-tight sm:text-4xl">
-              {viewMode === 'month' ? 'Calendar' : 'Events'}
-            </h1>
+            <h1 className="font-serif text-3xl font-semibold leading-tight sm:text-4xl">Events</h1>
             <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-              {viewMode === 'month'
-                ? 'Society events and meetings by month.'
-                : 'Every society event and meeting, in date order.'}
+              Every society event, in date order. Switch to Calendar for a month view.
             </p>
           </div>
 
           <div className="flex items-center gap-3">
-            {viewMode === 'agenda' && (
-              <button
-                onClick={() => setDialogOpen(true)}
-                style={{ borderRadius: 0 }}
-                className="flex items-center gap-2 border border-border bg-background px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:border-primary hover:text-primary"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add event
-              </button>
-            )}
+            <ViewModeToggle mode={mode} onChange={setMode} />
+            <button
+              onClick={() => setDialogOpen(true)}
+              style={{ borderRadius: 0 }}
+              className="flex items-center gap-2 border border-border bg-background px-4 py-1.5 text-sm font-medium text-foreground transition-colors hover:border-primary hover:text-primary"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add event
+            </button>
           </div>
         </div>
       </header>
@@ -269,308 +208,35 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
       {error && (
         <div className="flex items-center gap-2 border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
           <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>Couldn&apos;t load calendar events — try refreshing.</span>
+          <span>Couldn&apos;t load events — try refreshing.</span>
         </div>
       )}
 
-      {/* ── View 1: Month Grid View ──────────────────────────────────── */}
-      {viewMode === 'month' ? (
-        <div className="grid gap-10 lg:grid-cols-5 lg:gap-12">
-
-          {/* ── Monthly calendar (3 cols) ────────────────────────────── */}
-          <div className="lg:col-span-3">
-            {/* Month navigation */}
-            <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
-              <h2 className="font-serif text-xl font-semibold">
-                {format(currentDate, 'MMMM yyyy')}
-              </h2>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={handlePrevMonth}
-                  aria-label="Previous month"
-                  className="flex h-7 w-7 items-center justify-center border border-border text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={handleToday}
-                  className="border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  Today
-                </button>
-                <button
-                  onClick={handleNextMonth}
-                  aria-label="Next month"
-                  className="flex h-7 w-7 items-center justify-center border border-border text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Day-of-week headers */}
-            <div className="grid grid-cols-7 border-b border-border">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                <div
-                  key={d}
-                  className="py-1.5 text-center text-[11px] font-medium text-muted-foreground"
-                >
-                  {d}
-                </div>
-              ))}
-            </div>
-
-            {/* Calendar day cells */}
-            <div className="grid grid-cols-7 border-l border-border">
-              {days.map((day) => {
-                const dayEvents = eventsForDay(day);
-                const inMonth = isSameMonth(day, currentDate);
-                const isToday = isSameDay(day, new Date());
-                const isSelected = selectedDate && isSameDay(day, selectedDate);
-
-                return (
-                  <div
-                    key={day.toISOString()}
-                    onClick={() => setSelectedDate(isSelected ? null : day)}
-                    className={cn(
-                      'relative flex min-h-[72px] flex-col border-b border-r border-border p-1.5 text-left transition-colors sm:min-h-[88px] cursor-pointer',
-                      inMonth ? 'bg-background' : 'bg-muted/20',
-                      !inMonth && 'text-muted-foreground',
-                      isSelected && 'bg-primary/5'
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        'inline-block text-xs font-medium leading-none',
-                        isToday && 'font-bold text-primary underline underline-offset-2',
-                        isSelected && !isToday && 'text-primary'
-                      )}
-                    >
-                      {format(day, 'd')}
-                    </span>
-
-                    {isLoading ? (
-                      <div className="mt-2 hidden sm:block">
-                        <Skeleton className="h-2 w-full" />
-                      </div>
-                    ) : dayEvents.length > 0 ? (
-                      <div className="mt-1 hidden flex-col gap-1 overflow-hidden sm:flex">
-                        {dayEvents.slice(0, 2).map((e) => (
-                          <button
-                            key={e.id}
-                            type="button"
-                            onClick={(ev) => {
-                              ev.stopPropagation();
-                              setSelectedEvent(e);
-                            }}
-                            className={cn(
-                              'truncate text-left border px-1 py-0.5 text-[0.62rem] leading-tight transition-colors',
-                              chipClasses(e)
-                            )}
-                          >
-                            {e.title}
-                          </button>
-                        ))}
-                        {dayEvents.length > 2 && (
-                          <span className="px-1 text-[0.6rem] text-muted-foreground">
-                            +{dayEvents.length - 2} more
-                          </span>
-                        )}
-                      </div>
-                    ) : null}
-
-                    {dayEvents.length > 0 && !isLoading && (
-                      <span className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 bg-primary sm:hidden" />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Selected-day detail */}
-            {selectedDate && (
-              <div className="border-t border-border pt-4">
-                <p className="mb-3 text-xs text-muted-foreground">
-                  {format(selectedDate, 'EEEE, MMMM d, yyyy')}
-                </p>
-                {isLoading ? (
-                  <div className="space-y-3 py-2">
-                    <Skeleton className="h-4 w-1/2" />
-                    <Skeleton className="h-3 w-1/3" />
-                  </div>
-                ) : eventsForSelected.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No events on this day.</p>
-                ) : (
-                  <div className="divide-y divide-border">
-                    {eventsForSelected.map((e) => {
-                      return (
-                        <div
-                          key={e.id}
-                          onClick={() => setSelectedEvent(e)}
-                          className="group cursor-pointer py-3 transition-colors hover:text-primary"
-                        >
-                          <div className="flex items-center justify-between">
-                            <p className="font-serif text-sm font-semibold">{e.title}</p>
-                            <div className="flex items-center gap-1.5">
-                              <Badge variant="outline" className="text-[10px] capitalize">
-                                {eventKindLabel(e)}
-                              </Badge>
-                              {EVENT_FEATURES.editing && (
-                                <button
-                                  type="button"
-                                  title="Delete event"
-                                  aria-label={`Delete event ${e.title}`}
-                                  onClick={(ev) => {
-                                    ev.stopPropagation();
-                                    setEventToDelete(e);
-                                  }}
-                                  className="p-1 text-muted-foreground transition-colors hover:text-destructive hover:bg-destructive/10"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {formatEventTimeRange(e)}
-                            {e.location && ` · ${e.location}`}
-                          </p>
-                          {EVENT_FEATURES.description && e.description && (
-                            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                              {e.description}
-                            </p>
-                          )}
-                          {EVENT_FEATURES.agenda && e.agenda.length > 0 && (
-                            <p className="mt-1.5 text-[11px] text-primary/80">
-                              {e.agenda.length} agenda {e.agenda.length === 1 ? 'item' : 'items'} · Click to view timeline
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* ── Event schedule sidebar (2 cols) ──────────────────────── */}
-          <div className="lg:col-span-2">
-            <div className="mb-4 flex items-baseline justify-between border-b border-border pb-2">
-              <h2 className="font-serif text-lg font-semibold">Event Schedule</h2>
-              <span className="text-xs text-muted-foreground">
-                {isLoading
-                  ? 'Loading...'
-                  : `${monthlySortedEvents.length} in ${format(currentDate, 'MMMM')}${tbaEvents.length ? ` · ${tbaEvents.length} TBA` : ''}`}
-              </span>
-            </div>
-
-            <ScrollArea className="h-[560px] scrollbar-thin">
-              {isLoading ? (
-                <div className="divide-y divide-border pr-2">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="py-4 space-y-2">
-                      <Skeleton className="h-3 w-24" />
-                      <Skeleton className="h-5 w-4/5" />
-                      <Skeleton className="h-3 w-40" />
-                    </div>
-                  ))}
-                </div>
-              ) : monthlySortedEvents.length === 0 && tbaEvents.length === 0 ? (
-                <p className="py-8 text-xs text-muted-foreground">
-                  No events scheduled for this month.
-                </p>
-              ) : (
-                <div className="divide-y divide-border">
-                  {monthlySortedEvents.length === 0 && (
-                    <p className="py-4 text-xs text-muted-foreground">No dated events this month.</p>
-                  )}
-                  {[...monthlySortedEvents, ...tbaEvents].map((event, index) => {
-                    const tba = isTba(event);
-                    return (
-                      <article
-                        key={event.id}
-                        onClick={() => setSelectedEvent(event)}
-                        className="group cursor-pointer py-4 pr-2 transition-colors"
-                      >
-                        {tba && index === monthlySortedEvents.length && (
-                          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                            Date to be announced
-                          </p>
-                        )}
-                        <div className="flex items-center justify-between">
-                          {tba ? (
-                            <TbaTag />
-                          ) : (
-                            <p className="text-xs text-muted-foreground">
-                              {formatEventDate(event, 'EEE, MMM d')}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-1.5">
-                            <Badge variant="outline" className="text-[10px] capitalize">
-                              {eventKindLabel(event)}
-                            </Badge>
-                            {EVENT_FEATURES.editing && (
-                              <button
-                                type="button"
-                                title="Delete event"
-                                aria-label={`Delete event ${event.title}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEventToDelete(event);
-                                }}
-                                className="p-1 text-muted-foreground transition-colors hover:text-destructive hover:bg-destructive/10"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        <p className="mt-1 font-serif text-base font-semibold leading-snug group-hover:text-primary transition-colors">
-                          {event.title}
-                        </p>
-                        <div className="mt-1.5 space-y-1 text-xs text-muted-foreground">
-                          {!tba && (
-                            <span className="flex items-center gap-1.5">
-                              <Clock className="h-3 w-3 shrink-0" />
-                              {formatEventTimeRange(event)}
-                            </span>
-                          )}
-                          {event.location && (
-                            <span className="flex items-center gap-1.5">
-                              <MapPin className="h-3 w-3 shrink-0" />
-                              {event.location}
-                            </span>
-                          )}
-                          {EVENT_FEATURES.rsvp && event.rsvpCount > 0 && (
-                            <span className="flex items-center gap-1.5">
-                              <Users className="h-3 w-3 shrink-0" />
-                              {event.rsvpCount} Going
-                            </span>
-                          )}
-                        </div>
-                        {EVENT_FEATURES.agenda && event.agenda && event.agenda.length > 0 && (
-                          <div className="mt-2 text-[11px] text-muted-foreground/80">
-                            {event.agenda.length} scheduled segments
-                          </div>
-                        )}
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </ScrollArea>
-          </div>
-        </div>
+      {mode === 'calendar' ? (
+        /* ── Month calendar (events only; TBA events can't be placed) ── */
+        <section className="space-y-3">
+          <MonthCalendar
+            items={allEvents}
+            isLoading={isLoading}
+            onSelect={setSelectedEvent}
+            chipClassName={(e) => STATUS_CHIP_CLASSES[e.status ?? 'scheduled']}
+            noun="events"
+          />
+          {!isLoading && tbaEvents.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {tbaEvents.length} {tbaEvents.length === 1 ? 'event has' : 'events have'} no date yet, so {tbaEvents.length === 1 ? "it isn't" : "they aren't"} on the calendar. See them in List.
+            </p>
+          )}
+        </section>
       ) : (
-        /* ── View 2: List / Agenda View (Degrades to stacked cards below 640px) ── */
+        /* ── List view (Degrades to stacked cards below 640px) ── */
         <section className="space-y-6">
           <div className="flex items-baseline justify-between border-b border-border pb-2">
             <h2 className="font-serif text-xl font-semibold">All Events</h2>
             <span className="text-xs text-muted-foreground">
               {isLoading
                 ? 'Loading...'
-                : `${allEventsChronological.length} total${tbaEvents.length ? ` · ${tbaEvents.length} TBA` : ''}`}
+                : `${allEvents.length} total${tbaEvents.length ? ` · ${tbaEvents.length} TBA` : ''}`}
             </span>
           </div>
 
@@ -584,13 +250,13 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
                 </div>
               ))}
             </div>
-          ) : allEventsChronological.length === 0 ? (
+          ) : allEvents.length === 0 ? (
             <p className="py-8 text-xs text-muted-foreground">
               No events scheduled yet.
             </p>
           ) : (
             <div className="divide-y divide-border border-b border-border">
-              {allEventsChronological.map((event) => {
+              {allEvents.map((event) => {
                 const tba = isTba(event);
                 return (
                   <article
@@ -615,10 +281,6 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
                               </span>
                             </>
                           )}
-                          {/* Mobile-only badge inline with date */}
-                          <Badge variant="outline" className="sm:hidden text-[10px] capitalize ml-auto">
-                            {eventKindLabel(event)}
-                          </Badge>
                         </div>
                         <h3 className="font-serif text-base sm:text-lg font-semibold text-foreground group-hover:text-primary transition-colors">
                           {event.title}
@@ -649,9 +311,11 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
                               EPF
                             </Badge>
                           )}
-                          <Badge variant="outline" className="hidden sm:inline-flex text-[10px] capitalize">
-                            {eventKindLabel(event)}
-                          </Badge>
+                          {event.status && (
+                            <Badge variant="outline" className="text-[10px]">
+                              {STATUS_LABELS[event.status]}
+                            </Badge>
+                          )}
                           {EVENT_FEATURES.editing && (
                             <button
                               type="button"
@@ -696,19 +360,15 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
         <Dialog
           open={!!activeSelectedEvent}
           onOpenChange={(open) => {
-            if (!open) {
-              setSelectedEvent(null);
-              setEventDetailTab('overview');
-              setEditingDates(false);
-            }
+            if (!open) closeEvent();
           }}
         >
           <DialogContent style={{ borderRadius: 0 }} className="max-w-xl border-border max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               {/* Top row: badge + route */}
               <div className="flex items-center gap-2">
-                <Badge variant="outline" style={{ borderRadius: 0 }} className="text-[10px] uppercase tracking-wider capitalize">
-                  {eventKindLabel(activeSelectedEvent)}
+                <Badge variant="outline" style={{ borderRadius: 0 }} className="text-[10px] uppercase tracking-wider">
+                  Event
                 </Badge>
                 {isTba(activeSelectedEvent) && <TbaTag />}
                 <span className="font-mono text-xs text-muted-foreground">
@@ -725,92 +385,28 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
 
               {/* Date row with edit toggle */}
               <div className="flex items-center gap-2 mt-0.5">
-                {editingDates ? (
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <input
-                      type="date"
-                      value={editStartDate}
-                      onChange={(e) => setEditStartDate(e.target.value)}
-                      className="border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:border-primary"
-                      style={{ borderRadius: 0 }}
-                    />
-                    <input
-                      type="time"
-                      value={editStartTime}
-                      onChange={(e) => setEditStartTime(e.target.value)}
-                      className="border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:border-primary"
-                      style={{ borderRadius: 0 }}
-                    />
-                    <span className="text-muted-foreground">→</span>
-                    <input
-                      type="date"
-                      value={editEndDate}
-                      onChange={(e) => setEditEndDate(e.target.value)}
-                      className="border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:border-primary"
-                      style={{ borderRadius: 0 }}
-                    />
-                    <input
-                      type="time"
-                      value={editEndTime}
-                      onChange={(e) => setEditEndTime(e.target.value)}
-                      className="border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:border-primary"
-                      style={{ borderRadius: 0 }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (editStartDate && editStartTime && editEndDate && editEndTime) {
-                          updateEvent(activeSelectedEvent.id, {
-                            startDateTime: `${editStartDate}T${editStartTime}:00`,
-                            endDateTime: `${editEndDate}T${editEndTime}:00`,
-                            allDay: false,
-                          });
-                          toast({ title: 'Dates updated', description: 'Event dates have been saved.' });
-                        }
-                        setEditingDates(false);
-                      }}
-                      className="border border-primary bg-primary text-primary-foreground px-2 py-1 text-[10px] font-semibold transition-colors hover:opacity-90"
-                    >
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditingDates(false)}
-                      className="border border-border px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <DialogDescription className="text-xs text-muted-foreground">
-                      {formatEventDate(activeSelectedEvent, 'EEEE, MMMM d, yyyy')}
-                    </DialogDescription>
-                    {EVENT_FEATURES.editing && (
-                      <button
-                        type="button"
-                        title="Edit dates"
-                        onClick={() => {
-                          const s = eventStart(activeSelectedEvent);
-                          const en = parseDate(activeSelectedEvent.endDateTime) ?? s;
-                          setEditStartDate(s ? format(s, 'yyyy-MM-dd') : '');
-                          setEditStartTime(s ? format(s, 'HH:mm') : '');
-                          setEditEndDate(en ? format(en, 'yyyy-MM-dd') : '');
-                          setEditEndTime(en ? format(en, 'HH:mm') : '');
-                          setEditingDates(true);
-                        }}
-                        className="p-1 text-muted-foreground hover:text-primary transition-colors"
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  {formatEventDate(activeSelectedEvent, 'EEEE, MMMM d, yyyy')}
+                </DialogDescription>
+                {isEditable(activeSelectedEvent) && !editingDetails && (
+                  <button
+                    type="button"
+                    title="Edit date, time and location"
+                    aria-label="Edit date, time and location"
+                    onClick={() => setEditingDetails(true)}
+                    className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
                 )}
               </div>
             </DialogHeader>
 
-            {/* ── Progression Status (events only; meetings have none) ── */}
-            {activeSelectedEvent.kind === 'event' && (
+            {editingDetails && (
+              <EventDetailsEditor event={activeSelectedEvent} onDone={() => setEditingDetails(false)} />
+            )}
+
+            {/* ── Progression Status ── */}
             <div className="flex items-center gap-2 pt-1">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status:</span>
               {(['scheduled', 'planning-in-progress', 'done'] as EventStatus[]).map((s) => {
@@ -843,7 +439,6 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
                 );
               })}
             </div>
-            )}
 
             {/* ── Inner Tab Nav: Overview / To-do / Finance Reports ── */}
             <div className="flex border-b border-border mt-2">
@@ -887,12 +482,10 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
               )}
             </div>
 
-            {/* ── EPF (events only; meetings aren't in the Events database) ── */}
-            {activeSelectedEvent.kind === 'event' && (
-              <div className="pt-4">
-                <EpfPanel eventId={activeSelectedEvent.id} />
-              </div>
-            )}
+            {/* ── EPF ── */}
+            <div className="pt-4">
+              <EpfPanel eventId={activeSelectedEvent.id} />
+            </div>
 
             {/* ── Tab Panels ── */}
             <div className="min-w-0 space-y-6 pt-2 text-sm min-h-[180px]">
@@ -900,7 +493,11 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
               {/* ── OVERVIEW TAB ── */}
               {eventDetailTab === 'overview' && (
                 <>
-                  <EventOverview eventId={activeSelectedEvent.id} notionUrl={activeSelectedEvent.notionUrl} />
+                  <EventOverview
+                    eventId={activeSelectedEvent.id}
+                    notionUrl={activeSelectedEvent.notionUrl}
+                    editable={isEditable(activeSelectedEvent)}
+                  />
                   {EVENT_FEATURES.description && activeSelectedEvent.description && (
                     <div className="space-y-1.5">
                       <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -1003,7 +600,7 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
                 size="sm"
                 variant="ghost"
                 style={{ borderRadius: 0 }}
-                onClick={() => { setSelectedEvent(null); setEventDetailTab('overview'); setEditingDates(false); }}
+                onClick={closeEvent}
               >
                 Close
               </Button>
@@ -1020,7 +617,7 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
               Delete Event
             </AlertDialogTitle>
             <AlertDialogDescription className="text-xs text-muted-foreground">
-              Are you sure you want to remove &ldquo;{eventToDelete?.title}&rdquo;? This will remove the event from the calendar and schedule.
+              Are you sure you want to remove &ldquo;{eventToDelete?.title}&rdquo;? This will remove the event from the list and calendar.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-4 gap-2">
@@ -1054,6 +651,73 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
       </AlertDialog>
 
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EventDetailsEditor — date/time (or TBA) and location, saved to Notion
+// ─────────────────────────────────────────────────────────────────────────────
+
+function EventDetailsEditor({ event, onDone }: { event: Event; onDone: () => void }) {
+  const { saveEvent } = useEvents();
+  const { toast } = useToast();
+  const [when, setWhen] = useState<WhenValue>(() => whenFromEvent(event));
+  const [location, setLocation] = useState(event.location ?? '');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const timeline = buildTimeline(when);
+  const canSave = typeof timeline !== 'string' && !saving;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (typeof timeline === 'string' || saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await saveEvent(event.id, { ...timeline, location: location.trim() || null });
+      toast({ title: 'Event updated', description: 'Saved to Notion.' });
+      onDone();
+    } catch (err) {
+      setSaveError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 border border-border p-4">
+      <EventWhenFields value={when} onChange={setWhen} idPrefix={`edit-${event.id}`} disabled={saving} />
+      <div className="space-y-1.5">
+        <Label htmlFor={`edit-${event.id}-location`} className="text-xs">
+          Location <span className="text-muted-foreground">(optional)</span>
+        </Label>
+        <Input
+          id={`edit-${event.id}-location`}
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
+          placeholder="e.g. F4B09a, or Online"
+          maxLength={200}
+          disabled={saving}
+          style={{ borderRadius: 0 }}
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="submit" size="sm" style={{ borderRadius: 0 }} disabled={!canSave}>
+          {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" style={{ borderRadius: 0 }} disabled={saving} onClick={onDone}>
+          Cancel
+        </Button>
+        {saveError && (
+          <span role="alert" className="flex items-center gap-1.5 text-xs text-destructive">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            Not saved: {saveError}
+          </span>
+        )}
+      </div>
+    </form>
   );
 }
 

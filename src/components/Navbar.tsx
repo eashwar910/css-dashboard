@@ -5,7 +5,6 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import {
   Code2,
   Home,
-  CalendarDays,
   CalendarRange,
   ListChecks,
   NotebookPen,
@@ -20,7 +19,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/components/ThemeProvider';
 
-export type View = 'home' | 'calendar' | 'events' | 'minutes' | 'todo' | 'team' | 'finance' | 'external';
+export type View = 'home' | 'weekly' | 'events' | 'meetings' | 'team' | 'finance' | 'external';
 
 interface NavbarProps {
   currentView: View;
@@ -29,10 +28,9 @@ interface NavbarProps {
 
 const navItems: { id: View; label: string; icon: typeof Home }[] = [
   { id: 'home', label: 'Home', icon: Home },
-  { id: 'calendar', label: 'Calendar', icon: CalendarDays },
+  { id: 'weekly', label: 'Weekly', icon: ListChecks },
   { id: 'events', label: 'Events', icon: CalendarRange },
-  { id: 'minutes', label: 'Meeting Minutes', icon: NotebookPen },
-  { id: 'todo', label: 'Weekly To-Do', icon: ListChecks },
+  { id: 'meetings', label: 'Meetings', icon: NotebookPen },
   { id: 'team', label: 'Team', icon: Users },
   { id: 'finance', label: 'Finance', icon: Wallet },
   { id: 'external', label: 'External Relations', icon: Handshake },

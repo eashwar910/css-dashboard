@@ -49,7 +49,7 @@ import type { View } from '@/components/Navbar';
 import { EVENT_FEATURES } from '@/lib/features';
 import { TbaTag } from '@/components/TbaTag';
 import { AddDocumentDialog } from '@/components/AddDocumentDialog';
-import { eventKindLabel, formatEventDate, formatEventTimeRange, isTba } from '@/lib/eventDates';
+import { formatEventDate, formatEventTimeRange, isTba } from '@/lib/eventDates';
 
 import { useEvents } from '@/hooks/useEvents';
 import { useDocuments } from '@/hooks/useDocuments';
@@ -96,10 +96,10 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
   const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
   const { toast } = useToast();
 
-  // Dated upcoming events/meetings (already sorted), then events with no date
+  // Dated upcoming events (already sorted), then events with no date
   // yet that aren't done. Most events are TBA, so they're shown here too.
   const sortedUpcomingEvents = useMemo(
-    () => [...upcomingEvents, ...tbaEvents.filter((e) => e.kind === 'event' && e.status !== 'done')],
+    () => [...upcomingEvents, ...tbaEvents.filter((e) => e.status !== 'done')],
     [upcomingEvents, tbaEvents]
   );
 
@@ -423,11 +423,6 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
                             {formatEventDate(event, 'EEEE, MMMM d')}
                           </p>
                         )}
-                        {event.kind === 'meeting' && (
-                          <span className="border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-sky-700 dark:text-sky-400">
-                            Meeting
-                          </span>
-                        )}
                         {isSoonest && (
                           <span className="border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
                             Soonest
@@ -483,7 +478,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
           <DialogHeader>
             <div className="flex items-center gap-2">
               <Badge variant="outline" style={{ borderRadius: 0 }} className="text-[10px] uppercase tracking-wider capitalize">
-                {selectedEvent && eventKindLabel(selectedEvent)}
+                Event
               </Badge>
               {selectedEvent && isTba(selectedEvent) && <TbaTag />}
             </div>
@@ -556,10 +551,10 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
                   style={{ borderRadius: 0 }}
                   onClick={() => {
                     setSelectedEvent(null);
-                    onNavigate('calendar');
+                    onNavigate('events');
                   }}
                 >
-                  Open in Calendar
+                  Open in Events
                 </Button>
               )}
               {EVENT_FEATURES.editing && selectedEvent && (

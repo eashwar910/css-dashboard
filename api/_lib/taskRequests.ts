@@ -8,17 +8,11 @@ import type { CommitteeMember } from './auth.js';
 import { HttpError } from './http.js';
 import { cacheInvalidate, dataSourceId, notion, queryAll, retrievePageIn } from './notion.js';
 import { date, people, select, title, write } from './props.js';
+import { ASSIGNER_ROLES, hasAnyRole } from './roles.js';
 import { loadTeam } from './team.js';
 import { createTask } from './taskWrites.js';
 import type { TaskDto } from './tasks.js';
 import { getNotionUserIdForMemberEmail, notionUserIdFor } from './users.js';
-
-/**
- * Notion ExCo `Position` values (or committee_members.role) that may assign
- * tasks to others, compared case-insensitively. "Tech Lead" is the same
- * person's title in Supabase.
- */
-const ASSIGNER_ROLES = ['president', 'vice president', 'head of tech', 'tech lead'];
 
 export interface TaskRequestDto {
   id: string;
@@ -40,20 +34,8 @@ function todayInMalaysia(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }).format(new Date());
 }
 
-function normaliseRole(role: string | null | undefined): string {
-  return (role ?? '').trim().toLowerCase();
-}
-
-/** The member's ExCo position from Notion, matched by committee email. */
-async function notionPositionFor(member: CommitteeMember): Promise<string | null> {
-  const emails = new Set([member.email, member.notionEmail].filter(Boolean));
-  const row = (await loadTeam()).find((m) => m.email && emails.has(m.email.toLowerCase()));
-  return row?.role ?? null;
-}
-
 export async function canAssignTasks(member: CommitteeMember): Promise<boolean> {
-  if (ASSIGNER_ROLES.includes(normaliseRole(member.role))) return true;
-  return ASSIGNER_ROLES.includes(normaliseRole(await notionPositionFor(member)));
+  return hasAnyRole(member, ASSIGNER_ROLES);
 }
 
 async function requireAssigner(member: CommitteeMember) {

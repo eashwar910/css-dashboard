@@ -59,7 +59,12 @@ export function formatEventTimeRange(event: Pick<Event, 'startDateTime' | 'endDa
   return end ? `${format(start, 'h:mm a')} – ${format(end, 'h:mm a')}` : format(start, 'h:mm a');
 }
 
-/** Badge label: "Meeting" or "Event" (Notion has no event categories). */
-export function eventKindLabel(event: Pick<Event, 'kind'>): string {
-  return event.kind === 'meeting' ? 'Meeting' : 'Event';
+/** "2026-10-01" + "18:30" → "2026-10-01T18:30:00+08:00", using this browser's timezone on that date. */
+export function toOffsetDateTime(date: string, time: string): string {
+  const offsetMin = -new Date(`${date}T${time}:00`).getTimezoneOffset();
+  const sign = offsetMin >= 0 ? '+' : '-';
+  const abs = Math.abs(offsetMin);
+  const hh = String(Math.floor(abs / 60)).padStart(2, '0');
+  const mm = String(abs % 60).padStart(2, '0');
+  return `${date}T${time}:00${sign}${hh}:${mm}`;
 }

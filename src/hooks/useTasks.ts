@@ -7,8 +7,9 @@ import { apiFetch } from '@/lib/api';
 // useTasks
 //
 // Every task from /api/tasks (Notion Team Dashboard > Tasks), shared across
-// views, plus the weekly scrum view and per-event lists. Writes go to the
-// API; toggle and delete update optimistically and roll back on error.
+// views, plus everyone's weekly to-dos (this week and last) and per-event
+// lists. Writes go to the API; toggle and delete update optimistically and
+// roll back on error.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface TaskDto {
@@ -21,7 +22,11 @@ export interface TaskDto {
   mine: boolean;
   shared: boolean;
   sharedWith: string | null;
-  weekly: boolean;
+  week: string | null;
+  assignees: { id: string; name: string }[];
+  thisWeek: boolean;
+  carriedOver: boolean;
+  lastWeek: boolean;
   can: { toggle: boolean; edit: boolean; delete: boolean };
 }
 
@@ -29,7 +34,9 @@ interface TasksResponse {
   tasks: TaskDto[];
   weekStart: string;
   weekEnd: string;
+  lastWeekStart: string;
   notionLinked: boolean;
+  notionUserId: string | null;
 }
 
 function toTask(t: TaskDto): Task {
@@ -44,7 +51,11 @@ function toTask(t: TaskDto): Task {
     mine: t.mine,
     shared: t.shared,
     sharedWith: t.sharedWith ?? undefined,
-    weekly: t.weekly,
+    week: t.week ?? undefined,
+    assignees: t.assignees,
+    thisWeek: t.thisWeek,
+    carriedOver: t.carriedOver,
+    lastWeek: t.lastWeek,
     can: t.can,
   };
 }
@@ -53,7 +64,9 @@ interface TasksValue {
   tasks: Task[];
   weekStart: string | null;
   weekEnd: string | null;
+  lastWeekStart: string | null;
   notionLinked: boolean;
+  notionUserId: string | null;
 }
 
 const store = createApiStore<TasksResponse, TasksValue>(
@@ -62,9 +75,11 @@ const store = createApiStore<TasksResponse, TasksValue>(
     tasks: res.tasks.map(toTask),
     weekStart: res.weekStart,
     weekEnd: res.weekEnd,
+    lastWeekStart: res.lastWeekStart,
     notionLinked: res.notionLinked,
+    notionUserId: res.notionUserId,
   }),
-  { tasks: [], weekStart: null, weekEnd: null, notionLinked: true }
+  { tasks: [], weekStart: null, weekEnd: null, lastWeekStart: null, notionLinked: true, notionUserId: null }
 );
 
 // ── Writes (module-level so every view shares them) ──────────────────────────
@@ -136,18 +151,44 @@ async function deleteTask(id: string): Promise<void> {
   }
 }
 
-/** Label for the member's own tasks with no linked event in the weekly view. */
+/** byProject label for tasks with no linked event. */
 export const GENERAL_GROUP = 'General';
-/** Label for group-assigned and unassigned tasks in the weekly view. */
-export const SHARED_GROUP = 'Shared';
 
-export interface WeeklyGroup {
-  /** Stable key: event page id, 'general' or 'shared'. */
+export interface PersonGroup {
+  /** Notion user id, group name, or 'unassigned'. */
   key: string;
-  /** Event page id for event groups; null for "General" and "Shared". */
-  eventId: string | null;
   name: string;
+  /** The signed-in member's own group. */
+  isMe: boolean;
   tasks: Task[];
+}
+
+/**
+ * One group per PIC person (a task with several PICs appears under each),
+ * then Notion groups such as "Marketing Department", then "Unassigned".
+ * The signed-in member's group comes first; the rest are alphabetical.
+ */
+function groupByPerson(tasks: Task[], myUserId: string | null): PersonGroup[] {
+  const people = new Map<string, PersonGroup>();
+  const teams = new Map<string, PersonGroup>();
+  for (const task of tasks) {
+    if (task.assignees.length) {
+      for (const person of task.assignees) {
+        const group = people.get(person.id) ?? { key: person.id, name: person.name, isMe: person.id === myUserId, tasks: [] };
+        group.tasks.push(task);
+        people.set(person.id, group);
+      }
+      continue;
+    }
+    const name = task.sharedWith ?? 'Unassigned';
+    const group = teams.get(name) ?? { key: `group:${name}`, name, isMe: false, tasks: [] };
+    group.tasks.push(task);
+    teams.set(name, group);
+  }
+  const byName = (a: PersonGroup, b: PersonGroup) => a.name.localeCompare(b.name);
+  const ordered = [...people.values()].sort((a, b) => Number(b.isMe) - Number(a.isMe) || byName(a, b));
+  const groups = [...teams.values()].sort((a, b) => Number(a.name === 'Unassigned') - Number(b.name === 'Unassigned') || byName(a, b));
+  return [...ordered, ...groups];
 }
 
 export interface TasksResult extends AsyncResult<Task[]> {
@@ -159,10 +200,17 @@ export interface TasksResult extends AsyncResult<Task[]> {
   completedCount: number;
   /** Total task count. */
   totalCount: number;
-  /** The signed-in member's weekly scrum to-dos. */
-  weekly: Task[];
-  /** Weekly to-dos: the member's own grouped by linked event (alphabetical), then "General", then "Shared". */
-  weeklyGroups: WeeklyGroup[];
+  /** Everyone's to-dos for this week (planned this week, or still open). */
+  thisWeek: Task[];
+  /** Everyone's to-dos planned for last week, Done or not. */
+  lastWeek: Task[];
+  /** thisWeek grouped by person (you first). */
+  thisWeekGroups: PersonGroup[];
+  /** lastWeek grouped by person (you first). */
+  lastWeekGroups: PersonGroup[];
+  /** Monday 00:00 (Kuala Lumpur) of this week and last week, as ISO instants. */
+  weekStart: string | null;
+  lastWeekStart: string | null;
   /** False when no Notion user matches the member's email (see committee_members.notion_email). */
   notionLinked: boolean;
   /** All tasks linked to an event (the event detail to-do list). */
@@ -208,33 +256,10 @@ export function useTasks(): TasksResult {
 
   const completedCount = useMemo(() => data.filter((t) => t.completed).length, [data]);
 
-  const weekly = useMemo(() => data.filter((t) => t.weekly), [data]);
-
-  const weeklyGroups = useMemo<WeeklyGroup[]>(() => {
-    const events = new Map<string, WeeklyGroup>();
-    const general: WeeklyGroup = { key: 'general', eventId: null, name: GENERAL_GROUP, tasks: [] };
-    const shared: WeeklyGroup = { key: 'shared', eventId: null, name: SHARED_GROUP, tasks: [] };
-    for (const task of weekly) {
-      // A task that's both mine and shared can't happen: shared means no individual PIC.
-      if (task.shared) {
-        shared.tasks.push(task);
-        continue;
-      }
-      const eventId = task.project ? task.eventIds[0] : undefined;
-      if (!eventId) {
-        general.tasks.push(task);
-        continue;
-      }
-      const group = events.get(eventId) ?? { key: eventId, eventId, name: task.project!, tasks: [] };
-      group.tasks.push(task);
-      events.set(eventId, group);
-    }
-    return [
-      ...[...events.values()].sort((a, b) => a.name.localeCompare(b.name)),
-      general,
-      shared,
-    ].filter((g) => g.tasks.length > 0);
-  }, [weekly]);
+  const thisWeek = useMemo(() => data.filter((t) => t.thisWeek), [data]);
+  const lastWeek = useMemo(() => data.filter((t) => t.lastWeek), [data]);
+  const thisWeekGroups = useMemo(() => groupByPerson(thisWeek, value.notionUserId), [thisWeek, value.notionUserId]);
+  const lastWeekGroups = useMemo(() => groupByPerson(lastWeek, value.notionUserId), [lastWeek, value.notionUserId]);
 
   const forEvent = useCallback((eventId: string) => data.filter((t) => t.eventIds.includes(eventId)), [data]);
 
@@ -246,8 +271,12 @@ export function useTasks(): TasksResult {
     byStatus,
     completedCount,
     totalCount: data.length,
-    weekly,
-    weeklyGroups,
+    thisWeek,
+    lastWeek,
+    thisWeekGroups,
+    lastWeekGroups,
+    weekStart: value.weekStart,
+    lastWeekStart: value.lastWeekStart,
     notionLinked: value.notionLinked,
     forEvent,
     toggleTask,

@@ -32,8 +32,16 @@ export interface Task {
   shared: boolean;
   /** Group name(s) for shared tasks, or "Unassigned". */
   sharedWith?: string;
-  /** Included in the weekly scrum view (mine or shared; not Done, or Done this week). */
-  weekly: boolean;
+  /** Notion `Week`: Monday (YYYY-MM-DD) of the week it was planned for. Undefined when unset. */
+  week?: string;
+  /** Individual PIC people; the Weekly tab groups by these. */
+  assignees: { id: string; name: string }[];
+  /** In the Weekly tab's "This week" (planned this week, or still open). */
+  thisWeek: boolean;
+  /** Open and planned for an earlier week. */
+  carriedOver: boolean;
+  /** In the Weekly tab's "Last week" (planned for last week, Done or not). */
+  lastWeek: boolean;
   /** What the signed-in member may do. The server re-checks every write. */
   can: { toggle: boolean; edit: boolean; delete: boolean };
 }
@@ -82,12 +90,9 @@ export interface FinanceItem {
   type: 'income' | 'expense';
 }
 
-/** Team Dashboard > Events rows are 'event'; Team Dashboard > Meetings rows are 'meeting'. */
-export type EventKind = 'event' | 'meeting';
-
+/** A row of Team Dashboard > Events. Meetings are a separate type (Meeting). */
 export interface Event {
   id: string;
-  kind: EventKind;
   title: string;
   /** No Notion source yet; always '' (hidden in the UI, see EVENT_FEATURES). */
   description: string;
@@ -101,13 +106,13 @@ export interface Event {
   /** True when Notion holds a date without a time. */
   allDay?: boolean;
   location?: string;
-  /** Notion has no category; derived from kind ('meeting' or 'other'). */
+  /** Notion has no category; always 'other'. */
   category: EventCategory;
   /** No Notion source yet; always []. */
   agenda: AgendaItem[];
   /** No Notion source yet; always 0. */
   rsvpCount: number;
-  /** Progression status label. Undefined for meetings. */
+  /** Progression status label. Undefined for an unrecognised Notion status. */
   status?: EventStatus;
   /** Link to the event's Notion page. */
   notionUrl?: string;
@@ -115,6 +120,31 @@ export interface Event {
   todos?: EventTodoItem[];
   /** Per-event finance items */
   financeItems?: FinanceItem[];
+}
+
+// ── Meeting ──────────────────────────────────────────────────────────────────
+
+/** A row of Team Dashboard > Meetings. Its minutes are the Notion page body. */
+export interface Meeting {
+  id: string;
+  title: string;
+  /** Same formats as Event.startDateTime. Undefined when the date is TBA. */
+  startDateTime?: string;
+  endDateTime?: string;
+  allDay?: boolean;
+  location?: string;
+  /** Notion `Type`: JC / ExCo / Weekly Meeting. */
+  type?: string;
+  createdBy?: string;
+  notionUrl: string;
+}
+
+/** A new meeting: date YYYY-MM-DD and time HH:mm (Malaysia time). */
+export interface MeetingInput {
+  title: string;
+  date: string;
+  time: string;
+  notes?: string;
 }
 
 // ── TeamMember ───────────────────────────────────────────────────────────────

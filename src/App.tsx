@@ -3,8 +3,8 @@ import { ThemeProvider } from '@/components/ThemeProvider';
 import { useTheme } from '@/components/ThemeProvider';
 import { Navbar, type View } from '@/components/Navbar';
 import { HomeView } from '@/components/views/HomeView';
-import { CalendarView, EventsView } from '@/components/views/CalendarView';
-import { TasksView } from '@/components/views/TasksView';
+import { EventsView } from '@/components/views/EventsView';
+import { WeeklyView } from '@/components/views/WeeklyView';
 import { MeetingsView } from '@/components/views/MeetingsView';
 import { TeamView } from '@/components/views/TeamView';
 import { FinanceView } from '@/components/views/FinanceView';
@@ -45,10 +45,9 @@ function Dashboard() {
       <main className="flex-1">
         <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8 lg:px-12">
           {view === 'home' && <HomeView onNavigate={setView} />}
-          {view === 'calendar' && <CalendarView />}
+          {view === 'weekly' && <WeeklyView />}
           {view === 'events' && <EventsView />}
-          {view === 'minutes' && <MeetingsView />}
-          {view === 'todo' && <TasksView />}
+          {view === 'meetings' && <MeetingsView />}
           {view === 'team' && <TeamView />}
           {view === 'finance' && <FinanceView />}
           {view === 'external' && <ExternalRelationsView />}

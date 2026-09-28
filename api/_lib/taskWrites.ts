@@ -6,8 +6,8 @@ import type { CommitteeMember } from './auth.js';
 import { HttpError, normalisePageId } from './http.js';
 import { cacheInvalidate, dataSourceId, notion, retrievePageIn } from './notion.js';
 import { canModifyTask, type TaskAction } from './ownership.js';
-import { write } from './props.js';
-import { taskContext, toTask, type TaskDto, type TaskStatusDto } from './tasks.js';
+import { date, write } from './props.js';
+import { klMonday, taskContext, toTask, type TaskDto, type TaskStatusDto } from './tasks.js';
 import { notionUserIdFor } from './users.js';
 
 /** Dashboard status → exact Notion `Status` option (NOTION_MAPPING.md). */
@@ -68,12 +68,19 @@ async function toDto(member: CommitteeMember, pageId: string): Promise<TaskDto> 
 
 // ── Writes ───────────────────────────────────────────────────────────────────
 
-/** Tick (Done) or untick (Not started). Allowed for owners, admins, and anyone on shared tasks. */
+/**
+ * Tick (Done) or untick (Not started). Allowed for owners, admins, and anyone
+ * on shared tasks. Ticking a task with no `Week` files it under this week, so
+ * it shows as done this week and last week once the week turns.
+ */
 export async function setTaskCompleted(member: CommitteeMember, taskId: string, completed: boolean): Promise<TaskDto> {
-  await authorise(member, taskId, 'toggle');
+  const page = await authorise(member, taskId, 'toggle');
   await notion().pages.update({
     page_id: taskId,
-    properties: { Status: write.status(NOTION_STATUS[completed ? 'done' : 'todo']) },
+    properties: {
+      Status: write.status(NOTION_STATUS[completed ? 'done' : 'todo']),
+      ...(completed && !date(page, 'Week') ? { Week: write.date(klMonday(new Date())) } : {}),
+    },
   });
   cacheInvalidate('tasks:');
   return toDto(member, taskId);
@@ -116,7 +123,8 @@ export interface TaskCreate extends TaskEdit {
 }
 
 /**
- * Create a task with PIC = the creator and, if given, a link to its event.
+ * Create a task with PIC = the creator, Week = this week and, if given, a
+ * link to its event.
  * If the creator has no Notion user, the task is created without a PIC
  * (so it's "Unassigned") and `warning` says so.
  */
@@ -138,6 +146,8 @@ export async function createTask(
       'Due Date': write.date(dueDate),
       Events: write.relation(eventId ? [eventId] : []),
       PIC: write.people(creatorId ? [creatorId] : []),
+      // Planned for the week it was added
+      Week: write.date(klMonday(new Date())),
     },
   });
   cacheInvalidate('tasks:');

@@ -1,10 +1,10 @@
-// Event writes: create a row in Team Dashboard > Events.
+// Event writes: create a row in Team Dashboard > Events, or edit its date and location.
 // Events have no owner in Notion, so any committee member may create one.
 
 import { HttpError } from './http.js';
-import { cacheInvalidate, dataSourceId, notion } from './notion.js';
+import { cacheInvalidate, dataSourceId, notion, retrievePageIn } from './notion.js';
 import { write } from './props.js';
-import { toEvent, type CalendarItemDto, type EventStatusDto } from './events.js';
+import { toEvent, type EventDto, type EventStatusDto } from './events.js';
 
 /** Dashboard status → exact Notion `Status` option. */
 const NOTION_STATUS: Record<EventStatusDto, string> = {
@@ -69,7 +69,7 @@ function parseTimeline(start: unknown, end: unknown): { start: string | null; en
   return { start, end };
 }
 
-export async function createEvent(input: EventCreate): Promise<CalendarItemDto> {
+export async function createEvent(input: EventCreate): Promise<EventDto> {
   const title = parseTitle(input.title);
   const timeline = parseTimeline(input.start, input.end);
   const location = parseLocation(input.location);
@@ -87,5 +87,32 @@ export async function createEvent(input: EventCreate): Promise<CalendarItemDto> 
   cacheInvalidate('events:');
 
   if (!('properties' in page)) throw new HttpError(502, 'Notion did not return the new event');
+  return toEvent(page);
+}
+
+export interface EventEdit {
+  start?: unknown;
+  end?: unknown;
+  location?: unknown;
+}
+
+/**
+ * Edit an event's Timeline (send start and end together; start null = TBA)
+ * and/or Location. Any committee member may, like creating one.
+ */
+export async function updateEvent(id: string, edit: EventEdit): Promise<EventDto> {
+  const properties: Record<string, ReturnType<(typeof write)[keyof typeof write]>> = {};
+  if ('start' in edit || 'end' in edit) {
+    const timeline = parseTimeline(edit.start, edit.end);
+    properties.Timeline = write.date(timeline.start, timeline.end);
+  }
+  if ('location' in edit) properties.Location = write.richText(parseLocation(edit.location));
+  if (!Object.keys(properties).length) throw new HttpError(400, 'Nothing to update');
+
+  if (!(await retrievePageIn('events', id))) throw new HttpError(404, 'Event not found');
+  const page = await notion().pages.update({ page_id: id, properties });
+  cacheInvalidate('events:');
+
+  if (!('properties' in page)) throw new HttpError(502, 'Notion did not return the updated event');
   return toEvent(page);
 }
