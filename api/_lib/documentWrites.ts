@@ -6,23 +6,15 @@
 import type { CommitteeMember } from './auth.js';
 import { HttpError } from './http.js';
 import { cacheInvalidate, dataSourceId, notion } from './notion.js';
+import { attachedFile, uploadToNotion, type UploadedFile } from './fileUpload.js';
 import { write } from './props.js';
 import { toDocument, type DocumentDto } from './documents.js';
 import { notionUserIdFor } from './users.js';
-
-/** Vercel caps request bodies at 4.5 MB, so files must fit under that. */
-export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 
 export interface DocumentCreate {
   name?: unknown;
   type?: unknown;
   url?: unknown;
-}
-
-export interface DocumentFile {
-  filename: string;
-  contentType: string;
-  data: Buffer;
 }
 
 function parseName(value: unknown): string {
@@ -60,27 +52,13 @@ function parseUrl(value: unknown): string {
 export async function createDocument(
   member: CommitteeMember,
   input: DocumentCreate,
-  file?: DocumentFile,
+  file?: UploadedFile,
 ): Promise<DocumentDto> {
   const name = parseName(input.name);
   const type = parseType(input.type);
   const link = file ? null : parseUrl(input.url);
 
-  let fileUploadId: string | null = null;
-  if (file) {
-    if (file.data.length === 0) throw new HttpError(400, 'The file is empty');
-    if (file.data.length > MAX_UPLOAD_BYTES) throw new HttpError(413, 'Files must be 4 MB or smaller');
-    const upload = await notion().fileUploads.create({
-      mode: 'single_part',
-      filename: file.filename,
-      content_type: file.contentType,
-    });
-    await notion().fileUploads.send({
-      file_upload_id: upload.id,
-      file: { filename: file.filename, data: new Blob([file.data], { type: file.contentType }) },
-    });
-    fileUploadId = upload.id;
-  }
+  const fileUploadId = file ? await uploadToNotion(file) : null;
 
   const authorId = await notionUserIdFor(member);
   const page = await notion().pages.create({
@@ -90,9 +68,7 @@ export async function createDocument(
       'Document Type': write.select(type),
       'Document URL': { url: link },
       Author: write.people(authorId ? [authorId] : []),
-      ...(fileUploadId && file
-        ? { 'Document File': { files: [{ type: 'file_upload', file_upload: { id: fileUploadId }, name: file.filename }] } }
-        : {}),
+      ...(fileUploadId && file ? { 'Document File': attachedFile(fileUploadId, file.filename) } : {}),
     },
   });
   cacheInvalidate('documents:');

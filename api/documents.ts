@@ -4,16 +4,11 @@
 //   POST (application/octet-stream) ?name=&type=&filename=&contentType=
 //                           upload the request body as a file → { document }
 
-import type { VercelRequest } from '@vercel/node';
 import { requireCommittee } from './_lib/auth.js';
 import { createDocument } from './_lib/documentWrites.js';
 import { loadDocuments } from './_lib/documents.js';
-import { HttpError, jsonBody, sendJson, withHandler } from './_lib/http.js';
-
-function queryString(req: VercelRequest, name: string): string | undefined {
-  const raw = req.query[name];
-  return Array.isArray(raw) ? raw[0] : raw;
-}
+import { fileFromRequest } from './_lib/fileUpload.js';
+import { jsonBody, queryString, sendJson, withHandler } from './_lib/http.js';
 
 export default withHandler(
   ['GET', 'POST'],
@@ -28,13 +23,10 @@ export default withHandler(
 
     const contentType = req.headers['content-type'] ?? '';
     if (contentType.startsWith('application/octet-stream')) {
-      if (!Buffer.isBuffer(req.body)) throw new HttpError(400, 'Request body must be the file bytes');
-      const filename = queryString(req, 'filename')?.trim();
-      if (!filename) throw new HttpError(400, 'Query parameter "filename" is required');
       const document = await createDocument(
         member,
         { name: queryString(req, 'name'), type: queryString(req, 'type') },
-        { filename, contentType: queryString(req, 'contentType') || 'application/octet-stream', data: req.body },
+        fileFromRequest(req),
       );
       sendJson(res, 201, { document });
       return;

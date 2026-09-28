@@ -14,9 +14,6 @@ import {
 } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -40,13 +37,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   ChevronLeft,
   ChevronRight,
   Plus,
@@ -62,8 +52,9 @@ import {
   DollarSign,
   CheckSquare,
   ExternalLink,
+  FileCheck2,
 } from 'lucide-react';
-import type { Event, EventCategory, AgendaItem, EventStatus, EventTodoItem, Task } from '@/lib/types';
+import type { Event, EventStatus, EventTodoItem, Task } from '@/lib/types';
 import { useEvents } from '@/hooks/useEvents';
 import { EVENT_FEATURES } from '@/lib/features';
 import { TaskEditDialog } from '@/components/TaskEditDialog';
@@ -71,6 +62,9 @@ import { useFinance } from '@/hooks/useFinance';
 import { AddTransactionForm, FinanceSummary, TransactionList } from '@/components/finance/FinanceParts';
 import { useTasks } from '@/hooks/useTasks';
 import { TbaTag } from '@/components/TbaTag';
+import { AddEventDialog } from '@/components/AddEventDialog';
+import { EpfPanel } from '@/components/EpfPanel';
+import { useEpfs } from '@/hooks/useEpfs';
 import {
   eventEnd,
   eventKindLabel,
@@ -100,15 +94,6 @@ const STATUS_LABELS: Record<EventStatus, string> = {
   'planning-in-progress': 'Planning in Progress',
   'done': 'Done',
 };
-
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
-
-function formatHourLabel(h: number) {
-  if (h === 0) return '12 AM';
-  if (h < 12) return `${h} AM`;
-  if (h === 12) return '12 PM';
-  return `${h - 12} PM`;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // iCalendar (.ics) export generator
@@ -195,7 +180,9 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
   const { toast } = useToast();
 
   // Data layer hook acts as the single source of truth across the app
-  const { data: allEvents, tba: tbaEvents, isLoading, error, forMonth, addEvent, rsvpEvent, removeEvent, updateEvent } = useEvents();
+  const { data: allEvents, tba: tbaEvents, isLoading, error, forMonth, createEvent, rsvpEvent, removeEvent, updateEvent } = useEvents();
+
+  const { byEvent: epfsByEvent } = useEpfs();
 
   // Event detail dialog tab state
   const [eventDetailTab, setEventDetailTab] = useState<'overview' | 'todo' | 'finance'>('overview');
@@ -264,7 +251,7 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
           </div>
 
           <div className="flex items-center gap-3">
-            {EVENT_FEATURES.editing && (
+            {viewMode === 'agenda' && (
               <button
                 onClick={() => setDialogOpen(true)}
                 style={{ borderRadius: 0 }}
@@ -652,6 +639,16 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
                       {/* Right metadata / actions on desktop, bottom bar on mobile */}
                       <div className="flex shrink-0 items-center justify-between sm:justify-end gap-3 sm:flex-col sm:items-end sm:gap-2 pt-1 sm:pt-0 border-t border-border/40 sm:border-0">
                         <div className="flex items-center gap-1.5">
+                          {epfsByEvent[event.id] && (
+                            <Badge
+                              variant="outline"
+                              title="EPF uploaded"
+                              className="border-emerald-500/40 text-[10px] text-emerald-600 dark:text-emerald-400"
+                            >
+                              <FileCheck2 className="mr-1 h-3 w-3" />
+                              EPF
+                            </Badge>
+                          )}
                           <Badge variant="outline" className="hidden sm:inline-flex text-[10px] capitalize">
                             {eventKindLabel(event)}
                           </Badge>
@@ -692,11 +689,7 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
       )}
 
       {/* ── Create Event Dialog ──────────────────────────────────────── */}
-      <CreateEventDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        onAdd={(event) => addEvent(event)}
-      />
+      <AddEventDialog open={dialogOpen} onOpenChange={setDialogOpen} onCreate={createEvent} />
 
       {/* ── Event Detail View Dialog ─────────────────────────────────── */}
       {activeSelectedEvent && (
@@ -723,22 +716,11 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
                 </span>
               </div>
 
-              {/* Title + EPF button */}
-              <div className="flex items-center gap-3 mt-2">
+              {/* Title */}
+              <div className="mt-2">
                 <DialogTitle className="font-serif text-2xl font-semibold text-foreground">
                   {activeSelectedEvent.title}
                 </DialogTitle>
-                {EVENT_FEATURES.epf && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      toast({ title: 'EPF', description: `Opening Event Planning Form for "${activeSelectedEvent.title}"` });
-                    }}
-                    className="shrink-0 border border-border px-3 py-1 text-[11px] font-semibold tracking-wider uppercase text-foreground hover:border-primary hover:text-primary transition-colors"
-                  >
-                    EPF
-                  </button>
-                )}
               </div>
 
               {/* Date row with edit toggle */}
@@ -904,6 +886,13 @@ function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
                 </span>
               )}
             </div>
+
+            {/* ── EPF (events only; meetings aren't in the Events database) ── */}
+            {activeSelectedEvent.kind === 'event' && (
+              <div className="pt-4">
+                <EpfPanel eventId={activeSelectedEvent.id} />
+              </div>
+            )}
 
             {/* ── Tab Panels ── */}
             <div className="space-y-6 pt-2 text-sm min-h-[180px]">
@@ -1242,302 +1231,5 @@ function EventFinancePanel({ eventId }: { eventId: string }) {
         </>
       )}
     </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CreateEventDialog with repeatable Agenda / Sub-schedule items
-// ─────────────────────────────────────────────────────────────────────────────
-
-function CreateEventDialog({
-  open,
-  onOpenChange,
-  onAdd,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onAdd: (event: Omit<Event, 'id'> & { id?: string }) => void;
-}) {
-  const [name, setName] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [startTime, setStartTime] = useState('18:00');
-  const [endDate, setEndDate] = useState('');
-  const [endTime, setEndTime] = useState('19:30');
-  const [description, setDescription] = useState('');
-  const [location, setLocation] = useState('');
-  const [category, setCategory] = useState<EventCategory>('workshop');
-  const [agenda, setAgenda] = useState<AgendaItem[]>([
-    { time: '6:00 PM', title: 'Introduction & Welcome', description: '' },
-  ]);
-
-  const handleAddAgendaRow = () => {
-    setAgenda((prev) => [...prev, { time: '', title: '', description: '' }]);
-  };
-
-  const handleRemoveAgendaRow = (index: number) => {
-    setAgenda((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleAgendaChange = (index: number, field: keyof AgendaItem, value: string) => {
-    setAgenda((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
-    );
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name || !startDate || !startTime) return;
-
-    const startDateTime = `${startDate}T${startTime}:00`;
-    const resolvedEndDate = endDate || startDate;
-    const resolvedEndTime = endTime || startTime;
-    const endDateTime = `${resolvedEndDate}T${resolvedEndTime}:00`;
-
-    // Filter out completely empty agenda rows
-    const cleanedAgenda = agenda.filter(
-      (item) => item.time.trim() !== '' || item.title.trim() !== ''
-    );
-
-    onAdd({
-      id: `evt-${Date.now()}`,
-      kind: 'event',
-      title: name,
-      startDateTime,
-      endDateTime,
-      description,
-      location: location || undefined,
-      category,
-      agenda: cleanedAgenda,
-      rsvpCount: 0,
-    });
-
-    // Reset form state
-    setName('');
-    setStartDate('');
-    setStartTime('18:00');
-    setEndDate('');
-    setEndTime('19:30');
-    setDescription('');
-    setLocation('');
-    setCategory('workshop');
-    setAgenda([{ time: '6:00 PM', title: 'Introduction & Welcome', description: '' }]);
-    onOpenChange(false);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent style={{ borderRadius: 0 }} className="max-w-xl max-h-[90vh] overflow-y-auto border-border">
-        <DialogHeader>
-          <DialogTitle className="font-serif text-xl font-semibold flex items-center gap-2">
-            <CalendarPlus className="h-4 w-4 text-primary" />
-            New Society Event
-          </DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground">
-            Schedule a new event, timing, and segment breakdown for the society calendar.
-          </DialogDescription>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-          {/* Title */}
-          <div className="space-y-1.5">
-            <Label htmlFor="event-name" className="text-xs">Event Title *</Label>
-            <Input
-              id="event-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Annual Hackathon Kickoff"
-              style={{ borderRadius: 0 }}
-              required
-            />
-          </div>
-
-          {/* Category */}
-          <div className="space-y-1.5">
-            <Label htmlFor="event-category" className="text-xs">Category</Label>
-            <Select value={category} onValueChange={(v) => setCategory(v as EventCategory)}>
-              <SelectTrigger id="event-category" style={{ borderRadius: 0 }}>
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent style={{ borderRadius: 0 }}>
-                {(['workshop', 'social', 'meeting', 'hackathon', 'talk', 'other'] as EventCategory[]).map(
-                  (c) => (
-                    <SelectItem key={c} value={c}>
-                      {c.charAt(0).toUpperCase() + c.slice(1)}
-                    </SelectItem>
-                  )
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Start Date + Time */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="start-date" className="text-xs">Start Date *</Label>
-              <Input
-                id="start-date"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                style={{ borderRadius: 0 }}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="start-time" className="text-xs">Start Time *</Label>
-              <Select value={startTime} onValueChange={setStartTime}>
-                <SelectTrigger id="start-time" style={{ borderRadius: 0 }}>
-                  <SelectValue placeholder="Select time" />
-                </SelectTrigger>
-                <SelectContent className="max-h-[220px]" style={{ borderRadius: 0 }}>
-                  {HOURS.map((h) => (
-                    <SelectItem key={h} value={String(h).padStart(2, '0') + ':00'}>
-                      {formatHourLabel(h)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* End Date + Time */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="end-date" className="text-xs">End Date</Label>
-              <Input
-                id="end-date"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                style={{ borderRadius: 0 }}
-                placeholder="Same as start date"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="end-time" className="text-xs">End Time</Label>
-              <Select value={endTime} onValueChange={setEndTime}>
-                <SelectTrigger id="end-time" style={{ borderRadius: 0 }}>
-                  <SelectValue placeholder="Select time" />
-                </SelectTrigger>
-                <SelectContent className="max-h-[220px]" style={{ borderRadius: 0 }}>
-                  {HOURS.map((h) => (
-                    <SelectItem key={h} value={String(h).padStart(2, '0') + ':00'}>
-                      {formatHourLabel(h)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Location */}
-          <div className="space-y-1.5">
-            <Label htmlFor="event-location" className="text-xs">Location (optional)</Label>
-            <Input
-              id="event-location"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="e.g. Computer Science Atrium / Online"
-              style={{ borderRadius: 0 }}
-            />
-          </div>
-
-          {/* Description */}
-          <div className="space-y-1.5">
-            <Label htmlFor="event-description" className="text-xs">Description</Label>
-            <Textarea
-              id="event-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe what attendees can expect..."
-              style={{ borderRadius: 0 }}
-              rows={2}
-            />
-          </div>
-
-          {/* Agenda / Repeatable Sub-Schedule */}
-          <div className="space-y-2 border-t border-border pt-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-xs font-semibold">Agenda &amp; Timeline Segments</Label>
-                <p className="text-[11px] text-muted-foreground">
-                  Add multi-part segments or schedule breakdown (e.g. for workshops, hackathons)
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleAddAgendaRow}
-                className="flex items-center gap-1 border border-border px-2 py-1 text-xs text-foreground hover:border-primary hover:text-primary transition-colors"
-              >
-                <Plus className="h-3 w-3" />
-                Add Segment
-              </button>
-            </div>
-
-            <div className="space-y-2 pt-1">
-              {agenda.map((row, index) => (
-                <div
-                  key={index}
-                  className="flex items-start gap-2 border border-border bg-muted/10 p-2 text-xs"
-                >
-                  <div className="w-24 shrink-0">
-                    <Input
-                      placeholder="e.g. 10:00 AM"
-                      value={row.time}
-                      onChange={(e) => handleAgendaChange(index, 'time', e.target.value)}
-                      style={{ borderRadius: 0 }}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <Input
-                      placeholder="Segment title (e.g. Keynote)"
-                      value={row.title}
-                      onChange={(e) => handleAgendaChange(index, 'title', e.target.value)}
-                      style={{ borderRadius: 0 }}
-                      className="h-8 text-xs font-medium"
-                    />
-                    <Input
-                      placeholder="Optional notes / details"
-                      value={row.description || ''}
-                      onChange={(e) => handleAgendaChange(index, 'description', e.target.value)}
-                      style={{ borderRadius: 0 }}
-                      className="h-7 text-xs text-muted-foreground"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveAgendaRow(index)}
-                    aria-label="Remove agenda row"
-                    className="mt-1 p-1 text-muted-foreground hover:text-destructive transition-colors"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <DialogFooter className="pt-3">
-            <Button
-              type="button"
-              variant="outline"
-              style={{ borderRadius: 0 }}
-              onClick={() => onOpenChange(false)}
-              className="text-xs"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              style={{ borderRadius: 0 }}
-              className="text-xs"
-            >
-              Create Event
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }

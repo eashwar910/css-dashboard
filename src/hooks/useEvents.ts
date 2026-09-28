@@ -3,15 +3,18 @@ import { isSameMonth } from 'date-fns';
 import type { AsyncResult, Event, EventCategory, EventStatus } from '@/lib/types';
 import { createApiStore } from '@/lib/apiStore';
 import { compareEvents, eventStart, isTba, isUpcoming } from '@/lib/eventDates';
+import { apiFetch } from '@/lib/api';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared event store
 //
 // Single source of truth across views (Calendar & Events, Home, search),
-// loaded from GET /api/events (Notion Events + Meetings). The mutation
-// functions only change this in-memory copy; there is no event write
-// endpoint, so the UI hides them (EVENT_FEATURES.editing).
+// loaded from GET /api/events (Notion Events + Meetings). createEvent saves
+// to Notion (POST /api/events). The other mutation functions only change this
+// in-memory copy, so the UI hides them (EVENT_FEATURES.editing).
 // ─────────────────────────────────────────────────────────────────────────────
+
+type EventDto = EventsResponse['events'][number];
 
 interface EventsResponse {
   events: {
@@ -27,7 +30,7 @@ interface EventsResponse {
   }[];
 }
 
-function toEvent(dto: EventsResponse['events'][number]): Event {
+function toEvent(dto: EventDto): Event {
   return {
     id: dto.id,
     kind: dto.kind,
@@ -49,6 +52,15 @@ function toEvent(dto: EventsResponse['events'][number]): Event {
 
 const store = createApiStore<EventsResponse, Event[]>('events', (res) => res.events.map(toEvent), []);
 
+/** A new Notion event. start/end are ISO dates (all day) or datetimes with offset; no start = TBA. */
+export interface NewEvent {
+  title: string;
+  start: string | null;
+  end: string | null;
+  location: string | null;
+  status: EventStatus;
+}
+
 export interface EventsResult extends AsyncResult<Event[]> {
   /** Dated events and meetings that aren't over yet (sorted ascending). */
   upcoming: Event[];
@@ -60,6 +72,8 @@ export interface EventsResult extends AsyncResult<Event[]> {
   byCategory: Record<EventCategory, Event[]>;
   /** Add an event to the in-memory store (not saved to Notion). */
   addEvent: (event: Omit<Event, 'id'> & { id?: string }) => Event;
+  /** Create an event in Notion and add it to the shared store. */
+  createEvent: (input: NewEvent) => Promise<Event>;
   /** Increment the RSVP count in memory (not saved to Notion). */
   rsvpEvent: (id: string) => void;
   /** Remove an event from the in-memory store (not saved to Notion). */
@@ -81,6 +95,16 @@ export function useEvents(): EventsResult {
 
   const addEvent = useCallback((newEvent: Omit<Event, 'id'> & { id?: string }): Event => {
     const event: Event = { ...newEvent, id: newEvent.id || `evt-${Date.now()}` };
+    store.update((events) => [event, ...events]);
+    return event;
+  }, []);
+
+  const createEvent = useCallback(async (input: NewEvent): Promise<Event> => {
+    const { event: dto } = await apiFetch<{ event: EventDto }>('events', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    const event = toEvent(dto);
     store.update((events) => [event, ...events]);
     return event;
   }, []);
@@ -136,6 +160,7 @@ export function useEvents(): EventsResult {
     forMonth,
     byCategory,
     addEvent,
+    createEvent,
     rsvpEvent,
     removeEvent,
     deleteEvent: removeEvent,

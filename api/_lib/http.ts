@@ -32,6 +32,12 @@ export function jsonBody(req: VercelRequest): Record<string, unknown> {
   return body as Record<string, unknown>;
 }
 
+/** The first value of a query string parameter, if present. */
+export function queryString(req: VercelRequest, name: string): string | undefined {
+  const raw = req.query[name];
+  return Array.isArray(raw) ? raw[0] : raw;
+}
+
 /** A Notion page id from ?id=, normalised to dashed form. Throws 400 if missing or malformed. */
 export function pageIdParam(req: VercelRequest, name = 'id'): string {
   const raw = req.query[name];

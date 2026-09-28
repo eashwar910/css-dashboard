@@ -18,6 +18,4 @@ export const EVENT_FEATURES = {
    * truth and there is no event write endpoint, so edits would silently vanish.
    */
   editing: false,
-  /** EPF (Event Planning Form) button. Off until there is a form to open. */
-  epf: false,
 } as const;
