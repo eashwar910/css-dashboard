@@ -157,3 +157,14 @@ export const write = {
   relation: (pageIds: string[]) => ({ relation: pageIds.map((id) => ({ id })) }),
   checkbox: (checked: boolean) => ({ checkbox: checked }),
 };
+
+export function multiSelect(page: Page, name: string): string[] {
+  const options = prop(page, name, 'multi_select')?.multi_select;
+  if (!Array.isArray(options)) return [];
+  return options.map((o) => (typeof o?.name === 'string' ? o.name : '')).filter(Boolean);
+}
+
+export function phoneNumber(page: Page, name: string): string | null {
+  const value = prop(page, name, 'phone_number')?.phone_number;
+  return typeof value === 'string' && value.length ? value : null;
+}

@@ -53,8 +53,6 @@ import {
   Clock,
   MapPin,
   CalendarPlus,
-  CalendarDays,
-  ListFilter,
   Trash2,
   Check,
   Users,
@@ -175,12 +173,23 @@ function downloadIcsFile(event: Event) {
   URL.revokeObjectURL(url);
 }
 
+type CalendarMode = 'month' | 'agenda';
+
+/** Month grid. The chronological list lives in the Events tab (EventsView). */
 export function CalendarView() {
+  return <CalendarEventsView viewMode="month" />;
+}
+
+/** Chronological list of every event, TBA last. */
+export function EventsView() {
+  return <CalendarEventsView viewMode="agenda" />;
+}
+
+function CalendarEventsView({ viewMode }: { viewMode: CalendarMode }) {
   const [currentDate, setCurrentDate] = useState(() => startOfMonth(new Date()));
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
-  const [viewMode, setViewMode] = useState<'month' | 'agenda'>('month');
   const [rsvpedEventIds, setRsvpedEventIds] = useState<Set<string>>(new Set());
   const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
   const { toast } = useToast();
@@ -245,46 +254,16 @@ export function CalendarView() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="font-serif text-3xl font-semibold leading-tight sm:text-4xl">
-              Calendar &amp; Events
+              {viewMode === 'month' ? 'Calendar' : 'Events'}
             </h1>
             <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-              View, create, and manage all society events and detailed schedules.
+              {viewMode === 'month'
+                ? 'Society events and meetings by month.'
+                : 'Every society event and meeting, in date order.'}
             </p>
           </div>
 
           <div className="flex items-center gap-3">
-            {/* View Mode Toggle */}
-            <div className="flex items-center border border-border">
-              <button
-                type="button"
-                onClick={() => setViewMode('month')}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
-                  viewMode === 'month'
-                    ? 'bg-foreground text-background'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-                aria-pressed={viewMode === 'month'}
-              >
-                <CalendarDays className="h-3.5 w-3.5" />
-                Month Grid
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('agenda')}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
-                  viewMode === 'agenda'
-                    ? 'bg-foreground text-background'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-                aria-pressed={viewMode === 'agenda'}
-              >
-                <ListFilter className="h-3.5 w-3.5" />
-                List / Agenda
-              </button>
-            </div>
-
             {EVENT_FEATURES.editing && (
               <button
                 onClick={() => setDialogOpen(true)}
@@ -600,7 +579,7 @@ export function CalendarView() {
         /* ── View 2: List / Agenda View (Degrades to stacked cards below 640px) ── */
         <section className="space-y-6">
           <div className="flex items-baseline justify-between border-b border-border pb-2">
-            <h2 className="font-serif text-xl font-semibold">All Events (Chronological)</h2>
+            <h2 className="font-serif text-xl font-semibold">All Events</h2>
             <span className="text-xs text-muted-foreground">
               {isLoading
                 ? 'Loading...'

@@ -3,9 +3,11 @@ import { ThemeProvider } from '@/components/ThemeProvider';
 import { useTheme } from '@/components/ThemeProvider';
 import { Navbar, type View } from '@/components/Navbar';
 import { HomeView } from '@/components/views/HomeView';
-import { CalendarView } from '@/components/views/CalendarView';
+import { CalendarView, EventsView } from '@/components/views/CalendarView';
+import { TasksView } from '@/components/views/TasksView';
 import { TeamView } from '@/components/views/TeamView';
 import { FinanceView } from '@/components/views/FinanceView';
+import { ExternalRelationsView } from '@/components/views/ExternalRelationsView';
 import { Sun, Moon } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/components/AuthProvider';
@@ -39,11 +41,14 @@ function Dashboard() {
     <div className="flex min-h-screen flex-col bg-background">
       <Navbar currentView={view} onNavigate={setView} />
       <main className="flex-1">
-        <div className="mx-auto max-w-5xl px-8 py-10 sm:px-12 lg:px-16">
+        <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8 lg:px-12">
           {view === 'home' && <HomeView onNavigate={setView} />}
           {view === 'calendar' && <CalendarView />}
+          {view === 'events' && <EventsView />}
+          {view === 'todo' && <TasksView />}
           {view === 'team' && <TeamView />}
           {view === 'finance' && <FinanceView />}
+          {view === 'external' && <ExternalRelationsView />}
         </div>
       </main>
     </div>

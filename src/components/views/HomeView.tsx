@@ -1,8 +1,5 @@
 import { useState, useMemo } from 'react';
-import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { Checkbox } from '@/components/ui/checkbox';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,11 +24,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   ExternalLink,
-  Pencil,
-  Plus,
   MapPin,
-  CheckCircle2,
-  Circle,
   Clock,
   ScrollText,
   FileText,
@@ -49,19 +42,12 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import type { Event, Task } from '@/lib/types';
-import { TaskEditDialog } from '@/components/TaskEditDialog';
+import type { Event } from '@/lib/types';
 import type { View } from '@/components/Navbar';
 import { EVENT_FEATURES } from '@/lib/features';
 import { TbaTag } from '@/components/TbaTag';
-import { eventKindLabel, formatEventDate, formatEventTimeRange, isTba, parseDate } from '@/lib/eventDates';
+import { eventKindLabel, formatEventDate, formatEventTimeRange, isTba } from '@/lib/eventDates';
 
-/** "Due Sep 30", or "No due date". */
-function formatDueDate(dueDate: string | undefined) {
-  const due = parseDate(dueDate);
-  return due ? `Due ${format(due, 'MMM d')}` : 'No due date';
-}
-import { useTasks } from '@/hooks/useTasks';
 import { useEvents } from '@/hooks/useEvents';
 import { useDocuments } from '@/hooks/useDocuments';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
@@ -84,15 +70,6 @@ export interface HomeViewProps {
 }
 
 export function HomeView({ onNavigate }: HomeViewProps = {}) {
-  const {
-    weekly: tasks,
-    weeklyGroups,
-    notionLinked,
-    toggleTask,
-    createTask,
-    isLoading: tasksLoading,
-    error: tasksError,
-  } = useTasks();
   const { upcoming: upcomingEvents, tba: tbaEvents, data: allEvents, isLoading: eventsLoading, error: eventsError, removeEvent } = useEvents();
   const { data: documents, isLoading: docsLoading, error: docsError } = useDocuments();
   const { data: teamMembers } = useTeamMembers();
@@ -104,35 +81,6 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
   const { toast } = useToast();
-
-  const completedCount = useMemo(() => tasks.filter((t) => t.completed).length, [tasks]);
-
-  // Weekly to-do writes (saved to Notion; the server re-checks permissions)
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [addingTask, setAddingTask] = useState(false);
-
-  const handleToggleTask = (id: string) => {
-    toggleTask(id).catch((err: unknown) =>
-      toast({ title: "Couldn't update task", description: (err as Error).message, variant: 'destructive' })
-    );
-  };
-
-  const handleAddTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const title = newTaskTitle.trim();
-    if (!title || addingTask) return;
-    setAddingTask(true);
-    try {
-      const { warning } = await createTask({ title });
-      setNewTaskTitle('');
-      if (warning) toast({ title: 'Task added without a PIC', description: warning });
-    } catch (err) {
-      toast({ title: "Couldn't add task", description: (err as Error).message, variant: 'destructive' });
-    } finally {
-      setAddingTask(false);
-    }
-  };
 
   // Dated upcoming events/meetings (already sorted), then events with no date
   // yet that aren't done. Most events are TBA, so they're shown here too.
@@ -367,10 +315,10 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
       </section>
 
       {/* ── Main grid ───────────────────────────────────────────────── */}
-      <div className="grid gap-10 lg:grid-cols-5 lg:gap-12">
+      <div>
 
-        {/* ── Upcoming Events / Event Pinboard (3 cols) ─────────────── */}
-        <section className="lg:col-span-3">
+        {/* ── Upcoming Events / Event Pinboard ─────────────────────── */}
+        <section>
           <div className="mb-4 flex items-baseline justify-between border-b border-border pb-2">
             <h2 className="font-serif text-lg font-semibold">Upcoming Events</h2>
             <span className="text-xs text-muted-foreground">
@@ -481,134 +429,6 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
             </div>
           )}
         </section>
-
-        {/* ── Right column (2 cols): Weekly To-Do ─────────────────────── */}
-        <div className="space-y-10 lg:col-span-2">
-
-          {/* ── Weekly To-Do ────────────────────────────────────────── */}
-          <section>
-            <div className="mb-4 flex items-baseline justify-between border-b border-border pb-2">
-              <h2 className="font-serif text-lg font-semibold">Weekly To-Do</h2>
-              <span className="text-xs text-muted-foreground">
-                {tasksLoading ? 'Loading...' : `${completedCount} of ${tasks.length}`}
-              </span>
-            </div>
-
-            {tasksLoading ? (
-              <div className="divide-y divide-border">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="flex items-start gap-3 py-3">
-                    <Skeleton className="h-4 w-4 shrink-0 rounded" />
-                    <div className="flex-1 space-y-1.5">
-                      <Skeleton className="h-3.5 w-4/5" />
-                      <Skeleton className="h-3 w-2/5" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : tasksError ? (
-              <div className="flex items-center gap-2 py-6 text-xs text-destructive">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>Couldn't load tasks — try refreshing.</span>
-              </div>
-            ) : tasks.length === 0 ? (
-              <p className="py-6 text-xs text-muted-foreground">
-                {notionLinked
-                  ? 'No tasks for this week. All caught up!'
-                  : "Your login email doesn't match a Notion account, so your tasks can't be found yet. Ask an admin to set your Notion email."}
-              </p>
-            ) : (
-              <ScrollArea className="h-[340px] scrollbar-thin">
-                {weeklyGroups.map((group) => (
-                <div key={group.key} className="mb-2">
-                <h3 className="pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {group.name}
-                </h3>
-                <ul className="divide-y divide-border">
-                  {group.tasks.map((task) => (
-                    <li key={task.id} className="group flex items-start gap-1">
-                      <label
-                        className={cn(
-                          'flex flex-1 min-w-0 items-start gap-3 py-3 transition-colors',
-                          task.can.toggle ? 'cursor-pointer hover:text-primary' : 'cursor-default'
-                        )}
-                        title={task.can.toggle ? undefined : 'Only the PIC or an admin can tick this'}
-                      >
-                        <Checkbox
-                          checked={task.completed}
-                          disabled={!task.can.toggle}
-                          onCheckedChange={() => handleToggleTask(task.id)}
-                          className="mt-0.5 shrink-0"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <span
-                            className={cn(
-                              'text-sm leading-snug',
-                              task.completed
-                                ? 'text-muted-foreground line-through'
-                                : 'text-foreground'
-                            )}
-                          >
-                            {task.title}
-                          </span>
-                          <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                            {task.completed ? (
-                              <CheckCircle2 className="h-3 w-3 shrink-0" />
-                            ) : (
-                              <Circle className="h-3 w-3 shrink-0" />
-                            )}
-                            <span>{formatDueDate(task.dueDate)}</span>
-                            {task.sharedWith && (
-                              <>
-                                <span className="text-muted-foreground/60">·</span>
-                                <span>{task.sharedWith}</span>
-                              </>
-                            )}
-                          </p>
-                        </div>
-                      </label>
-                      {task.can.edit && (
-                        <button
-                          type="button"
-                          title="Edit task"
-                          aria-label={`Edit task ${task.title}`}
-                          onClick={() => setEditingTask(task)}
-                          className="mt-3 p-1 text-muted-foreground opacity-0 transition-all hover:text-primary group-hover:opacity-100 focus:opacity-100"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-                </div>
-                ))}
-              </ScrollArea>
-            )}
-
-            {/* Add a task for yourself (no event → "General") */}
-            {!tasksLoading && !tasksError && (
-              <form onSubmit={handleAddTask} className="mt-3 flex gap-2">
-                <Input
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  placeholder="Add a task for yourself…"
-                  disabled={addingTask}
-                  style={{ borderRadius: 0 }}
-                  className="h-8 text-xs"
-                />
-                <Button type="submit" size="sm" variant="outline" style={{ borderRadius: 0 }} className="h-8 text-xs" disabled={addingTask || !newTaskTitle.trim()}>
-                  <Plus className="mr-1 h-3 w-3" />
-                  {addingTask ? 'Adding…' : 'Add'}
-                </Button>
-              </form>
-            )}
-
-            <TaskEditDialog task={editingTask} onOpenChange={(open) => !open && setEditingTask(null)} />
-          </section>
-
-        </div>
-
       </div>
 
       {/* ── Event Detail Dialog ──────────────────────────────────────── */}

@@ -2,11 +2,24 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
-import { Code2, Home, CalendarDays, Users, Wallet, Menu, LogOut, Sun, Moon } from 'lucide-react';
+import {
+  Code2,
+  Home,
+  CalendarDays,
+  CalendarRange,
+  ListChecks,
+  Users,
+  Wallet,
+  Handshake,
+  Menu,
+  LogOut,
+  Sun,
+  Moon,
+} from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/components/ThemeProvider';
 
-export type View = 'home' | 'calendar' | 'team' | 'finance';
+export type View = 'home' | 'calendar' | 'events' | 'todo' | 'team' | 'finance' | 'external';
 
 interface NavbarProps {
   currentView: View;
@@ -15,9 +28,12 @@ interface NavbarProps {
 
 const navItems: { id: View; label: string; icon: typeof Home }[] = [
   { id: 'home', label: 'Home', icon: Home },
-  { id: 'calendar', label: 'Calendar & Events', icon: CalendarDays },
-  { id: 'team', label: 'Team Directory', icon: Users },
+  { id: 'calendar', label: 'Calendar', icon: CalendarDays },
+  { id: 'events', label: 'Events', icon: CalendarRange },
+  { id: 'todo', label: 'Weekly To-Do', icon: ListChecks },
+  { id: 'team', label: 'Team', icon: Users },
   { id: 'finance', label: 'Finance', icon: Wallet },
+  { id: 'external', label: 'External Relations', icon: Handshake },
 ];
 
 function ThemeToggleButton() {
@@ -41,7 +57,7 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background">
-      <div className="mx-auto flex h-14 max-w-5xl items-center gap-8 px-5 sm:px-12 lg:px-16">
+      <div className="flex h-14 items-center gap-8 px-5 sm:px-6">
         {/* Masthead */}
         <div className="flex shrink-0 items-center gap-2">
           <Code2 className="h-4 w-4 text-primary shrink-0" />
@@ -50,7 +66,7 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
 
         {/* Desktop navigation — plain text links, active one underlined */}
         <nav className="hidden h-full flex-1 lg:block">
-          <ul className="flex h-full items-stretch gap-6">
+          <ul className="flex h-full items-stretch gap-5 xl:gap-6">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = currentView === item.id;
@@ -59,14 +75,14 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
                   <button
                     onClick={() => onNavigate(item.id)}
                     className={cn(
-                      '-mb-px flex h-full items-center gap-2 border-b-2 text-sm transition-colors',
+                      '-mb-px flex h-full items-center gap-2 whitespace-nowrap border-b-2 text-sm transition-colors',
                       active
                         ? 'border-primary text-primary font-medium'
                         : 'border-transparent text-muted-foreground hover:text-foreground'
                     )}
                     aria-current={active ? 'page' : undefined}
                   >
-                    <Icon className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                    <Icon className="hidden h-3.5 w-3.5 shrink-0 opacity-60 xl:block" />
                     {item.label}
                   </button>
                 </li>
@@ -77,7 +93,7 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
 
         {/* Desktop account — signed-in member, log out, theme toggle */}
         <div className="hidden shrink-0 items-center gap-4 lg:flex">
-          <div className="min-w-0 max-w-[12rem] text-right">
+          <div className="hidden min-w-0 max-w-[12rem] text-right xl:block">
             <p className="truncate text-sm font-medium leading-tight">{displayName}</p>
             {member?.role && (
               <p className="truncate text-xs text-muted-foreground">{member.role}</p>
