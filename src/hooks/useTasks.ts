@@ -11,7 +11,7 @@ import { apiFetch } from '@/lib/api';
 // API; toggle and delete update optimistically and roll back on error.
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface TaskDto {
+export interface TaskDto {
   id: string;
   title: string;
   status: TaskStatus;
@@ -99,6 +99,12 @@ async function createTask(input: TaskInput & { title: string }): Promise<{ task:
   const task = toTask(res.task);
   store.update((v) => ({ ...v, tasks: [...v.tasks, task] }));
   return { task, warning: res.warning };
+}
+
+/** Add a task the server just created elsewhere (e.g. an accepted task request). */
+export function addTaskFromServer(dto: TaskDto): void {
+  const task = toTask(dto);
+  store.update((v) => ({ ...v, tasks: [...v.tasks.filter((t) => t.id !== task.id), task] }));
 }
 
 async function editTask(id: string, input: TaskInput): Promise<Task> {

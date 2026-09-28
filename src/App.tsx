@@ -11,6 +11,7 @@ import { FinanceView } from '@/components/views/FinanceView';
 import { ExternalRelationsView } from '@/components/views/ExternalRelationsView';
 import { Sun, Moon } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
+import { TaskRequestNotifications } from '@/components/TaskRequestNotifications';
 import { AuthProvider } from '@/components/AuthProvider';
 import { LoginView } from '@/components/views/LoginView';
 import { useAuth } from '@/hooks/useAuth';
@@ -53,6 +54,7 @@ function Dashboard() {
           {view === 'external' && <ExternalRelationsView />}
         </div>
       </main>
+      <TaskRequestNotifications />
     </div>
   );
 }

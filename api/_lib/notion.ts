@@ -16,6 +16,7 @@ const DATA_SOURCE_ENV = {
   transactions: 'NOTION_TRANSACTIONS_DS_ID',
   externalRelations: 'NOTION_EXTERNAL_RELATIONS_DS_ID',
   epf: 'NOTION_EPF_DS_ID',
+  taskRequests: 'NOTION_TASK_REQUESTS_DS_ID',
 } as const;
 
 export type DataSourceName = keyof typeof DATA_SOURCE_ENV;

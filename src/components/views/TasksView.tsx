@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useTasks } from '@/hooks/useTasks';
 import type { Task } from '@/lib/types';
 import { TaskEditDialog } from '@/components/TaskEditDialog';
+import { AssignTaskForm } from '@/components/AssignTaskForm';
 import { parseDate } from '@/lib/eventDates';
 
 /** "Due Sep 30", or "No due date". */
@@ -185,6 +186,8 @@ export function TasksView() {
             </Button>
           </form>
         )}
+
+        <AssignTaskForm />
 
         <TaskEditDialog task={editingTask} onOpenChange={(open) => !open && setEditingTask(null)} />
       </section>
