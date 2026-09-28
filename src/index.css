@@ -176,3 +176,42 @@
     transition: none !important;
   }
 }
+
+/* ── Rich-text editor (RichTextEditor / TipTap) ─────────────────────────────
+   Mirrors the read-only page body styling in EventOverview.tsx. */
+@layer components {
+  .rich-text > * + * { @apply mt-2; }
+  .rich-text h1 { @apply mt-5 font-serif text-lg font-semibold; }
+  .rich-text h2 { @apply mt-5 font-serif text-base font-semibold; }
+  .rich-text h3 { @apply mt-4 text-sm font-semibold; }
+  .rich-text p { @apply leading-relaxed; }
+  .rich-text ul { @apply list-disc space-y-1 pl-5; }
+  .rich-text ol { @apply list-decimal space-y-1 pl-5; }
+  .rich-text li > p { @apply my-0; }
+  .rich-text ul[data-type='taskList'] { @apply list-none pl-1; }
+  .rich-text ul[data-type='taskList'] li { @apply flex items-start gap-2; }
+  .rich-text ul[data-type='taskList'] li > label { @apply mt-1 shrink-0; }
+  .rich-text ul[data-type='taskList'] li > label input { @apply h-3.5 w-3.5 accent-primary; }
+  .rich-text ul[data-type='taskList'] li > div { @apply min-w-0 flex-1; }
+  .rich-text blockquote { @apply border-l-2 border-border pl-3 text-muted-foreground; }
+  .rich-text a { @apply text-primary underline underline-offset-2; }
+  .rich-text code { @apply bg-muted px-1 py-0.5 font-mono text-xs; }
+  .rich-text pre { @apply overflow-x-auto bg-muted p-3 text-xs; }
+  .rich-text pre code { @apply bg-transparent p-0; }
+  .rich-text hr { @apply my-4 border-border; }
+  .rich-text img { @apply my-3 max-h-80 max-w-full border border-border; }
+  .rich-text img.ProseMirror-selectednode { @apply outline outline-2 outline-primary; }
+  .rich-text table { @apply my-3 w-full table-fixed border-collapse text-xs; }
+  .rich-text th, .rich-text td { @apply relative border border-border px-2.5 py-1.5 text-left align-top; }
+  .rich-text th { @apply bg-muted/40 font-semibold; }
+  .rich-text .selectedCell::after { @apply pointer-events-none absolute inset-0 bg-primary/10 content-['']; }
+  .rich-text .tableWrapper { @apply overflow-x-auto; }
+  .rich-text .notion-mention { @apply bg-muted px-1 font-medium text-foreground; }
+  .rich-text .notion-block { @apply my-3 cursor-default border border-dashed border-border bg-muted/30 p-3; }
+  .rich-text .notion-block.ProseMirror-selectednode { @apply border-primary; }
+  .rich-text .notion-block-label { @apply mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground; }
+  .rich-text .notion-block-preview { @apply text-xs text-muted-foreground; }
+  .rich-text p.is-editor-empty:first-child::before {
+    @apply pointer-events-none float-left h-0 text-muted-foreground content-[attr(data-placeholder)];
+  }
+}

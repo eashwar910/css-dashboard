@@ -1,7 +1,10 @@
-// Event writes: create a row in Team Dashboard > Events, or edit its date and location.
-// Events have no owner in Notion, so any committee member may create one.
+// Event writes on Team Dashboard > Events. Events have no owner in Notion, so
+// any committee member may create or edit one; deleting (Notion trash) is for
+// organisers (roles.ts).
 
+import type { CommitteeMember } from './auth.js';
 import { HttpError } from './http.js';
+import { isOrganiser, ORGANISER_ONLY } from './roles.js';
 import { cacheInvalidate, dataSourceId, notion, retrievePageIn } from './notion.js';
 import { write } from './props.js';
 import { toEvent, type EventDto, type EventStatusDto } from './events.js';
@@ -32,7 +35,7 @@ function parseTitle(value: unknown): string {
   return text;
 }
 
-function parseLocation(value: unknown): string | null {
+export function parseLocation(value: unknown): string | null {
   if (value === undefined || value === null || value === '') return null;
   if (typeof value !== 'string' || value.trim().length > 200) throw new HttpError(400, 'Location must be text of 200 characters or fewer');
   return value.trim() || null;
@@ -48,7 +51,7 @@ function parseStatus(value: unknown): EventStatusDto {
  * start null = date TBA (end must be null too). Otherwise start and end must
  * both be dates (all day) or both datetimes with an offset, and end >= start.
  */
-function parseTimeline(start: unknown, end: unknown): { start: string | null; end: string | null } {
+export function parseTimeline(start: unknown, end: unknown): { start: string | null; end: string | null } {
   if (start === undefined || start === null || start === '') {
     if (end !== undefined && end !== null && end !== '') throw new HttpError(400, 'An end needs a start');
     return { start: null, end: null };
@@ -91,17 +94,21 @@ export async function createEvent(input: EventCreate): Promise<EventDto> {
 }
 
 export interface EventEdit {
+  title?: unknown;
+  status?: unknown;
   start?: unknown;
   end?: unknown;
   location?: unknown;
 }
 
 /**
- * Edit an event's Timeline (send start and end together; start null = TBA)
- * and/or Location. Any committee member may, like creating one.
+ * Edit an event's title, status, Timeline (send start and end together;
+ * start null = TBA) and/or Location. Any committee member may, like creating one.
  */
 export async function updateEvent(id: string, edit: EventEdit): Promise<EventDto> {
   const properties: Record<string, ReturnType<(typeof write)[keyof typeof write]>> = {};
+  if ('title' in edit) properties.Name = write.title(parseTitle(edit.title));
+  if ('status' in edit) properties.Status = write.status(NOTION_STATUS[parseStatus(edit.status)]);
   if ('start' in edit || 'end' in edit) {
     const timeline = parseTimeline(edit.start, edit.end);
     properties.Timeline = write.date(timeline.start, timeline.end);
@@ -115,4 +122,12 @@ export async function updateEvent(id: string, edit: EventEdit): Promise<EventDto
 
   if (!('properties' in page)) throw new HttpError(502, 'Notion did not return the updated event');
   return toEvent(page);
+}
+
+/** Move an event to Notion's trash (restorable there for 30 days). Organisers only. */
+export async function deleteEvent(member: CommitteeMember, id: string): Promise<void> {
+  if (!(await isOrganiser(member))) throw new HttpError(403, ORGANISER_ONLY);
+  if (!(await retrievePageIn('events', id))) throw new HttpError(404, 'Event not found');
+  await notion().pages.update({ page_id: id, in_trash: true });
+  cacheInvalidate('events:');
 }

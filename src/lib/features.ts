@@ -1,8 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // UI switches for event features that have no Notion source yet.
 //
-// The components stay in the codebase; flip a flag to true once Notion (and,
-// for `editing`, an /api write endpoint) can back it. See docs/PLAN.md.
+// The components stay in the codebase; flip a flag to true once Notion can
+// back it. See docs/PLAN.md. (Adding, editing and deleting events all save to
+// Notion and are always on.)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const EVENT_FEATURES = {
@@ -12,11 +13,4 @@ export const EVENT_FEATURES = {
   rsvp: false,
   /** Free-text event description. */
   description: false,
-  /**
-   * Delete events and change their status from the dashboard. Off because
-   * these only change browser memory, so edits would silently vanish.
-   * (Adding events, and editing an upcoming event's date, location and
-   * Overview, do save to Notion and are always on.)
-   */
-  editing: false,
 } as const;

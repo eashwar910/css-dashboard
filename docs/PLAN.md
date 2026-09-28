@@ -43,15 +43,26 @@ Restructured 2026-09-29 after the President's review (`scripts/restructure-meeti
 - `Name` → title, `Timeline` (date range) → start/end, `Location` (text) → location.
 - Status mapping: Not started → `scheduled`, In progress → `planning-in-progress`, Done → `done`.
 - **An event with no date shows a "TBA" tag.** TBA events appear in the list; the month calendar can't place them and says how many are missing.
-- **Upcoming and TBA events are editable** from the event dialog, by any committee member:
-  - Overview = the Notion page body. The editor edits Notion's own Markdown and saves it with `PUT /api/event-content` (`pages.updateMarkdown`, `replace_content`). The client sends the Markdown it started from as `base`; if the page changed in Notion since, the server answers 409 instead of overwriting. Child pages/databases are never deleted, and pages too long to read in full are edit-in-Notion only.
-  - Date/time (or TBA) and Location save with `PATCH /api/events?id=`.
+- **The dashboard is the primary tool; Notion is the backend.** Everything about an event is edited from its dialog and saved to Notion:
+  - Name, date/time (or TBA), Location and Status: `PATCH /api/events?id=`, by any committee member.
+  - Overview (the page body): the rich-text editor (see "Page bodies" below), by any committee member.
+  - Delete: moves the page to Notion's trash (restorable for 30 days), organisers only (`DELETE /api/events?id=`).
 - Hide agenda, RSVP and description in the UI for now, but don't delete the components.
 
 **Meetings tab** reads only Team Dashboard > Meetings (`/api/meetings`). Meetings never appear in Events or on Home.
 - `Name` → title, `Date` → start/end (a datetime carries the time), `Venue` → location, `Type` (JC / ExCo / Weekly Meeting), `Created By` (people, set by the dashboard). Minutes are the page body.
 - **Upcoming Meetings**: not over yet, soonest first, plus TBA meetings. **Meeting Minutes**: over, most recent first. A meeting moves across automatically once its end (or its day, if it has no time) has passed. There is no status property to go stale.
-- The President, Vice President, Secretary and Head of Tech (ExCo `Position` or `committee_members.role`, see `api/_lib/roles.ts`) can add a meeting: title, date, time (Malaysia) and optional notes, which become the page body. Nothing is recurring; the weekly meeting is added like any other.
+- **Organisers** (President, Vice President, Secretary, Head of Tech via ExCo `Position` or `committee_members.role`, plus `is_admin`; `api/_lib/roles.ts`) add, edit and delete meetings and write their notes and minutes:
+  - Add: title, date, time (Malaysia), optional venue, type and notes (`POST /api/meetings`).
+  - Edit: title, date/time (or TBA), venue, type (`PATCH /api/meetings?id=`). Delete moves the page to Notion's trash (`DELETE`).
+  - Notes (upcoming) and minutes (past) are the page body, edited with the rich-text editor.
+  - Everyone else can read them. Nothing is recurring; the weekly meeting is added like any other.
+
+**Page bodies** (event Overview, meeting notes/minutes) are edited in a rich-text editor (TipTap, `src/components/RichTextEditor.tsx`), never raw Markdown. Markdown is only the wire format:
+- `GET /api/event-content?id=` returns `editorMarkdown` (from `toEditorMarkdown` in `api/_lib/notionMarkdown.ts`), the stored `source`, and `canEdit`. `PUT` saves with `pages.updateMarkdown` `replace_content`, sending `source` back as `base`; if the page changed meanwhile the server answers 409 instead of overwriting.
+- Round-trips unchanged (`src/lib/editorExtensions.ts`): headings, bold/italic/strike/code, links, lists, checklists, quotes, tables, dividers, code, images (Notion keeps its hosted image), `<br>`, blank lines (`<empty-block/>`), text colours, @mentions and date mentions. Notion-only blocks (AI meeting notes, callouts, toggles, sub-pages…) are kept verbatim as read-only blocks. Paragraphs with indented children are flattened to the parent's level (text unchanged).
+- Child pages/databases are never deleted by a save, and pages too long for Notion to return in full are edit-in-Notion only.
+- After changing the conversion or the editor, run `npx tsx --env-file=.env.local scripts/check-editor-roundtrip.ts`: it round-trips every event and meeting page through the editor into a scratch page and reports any difference.
 
 ## Tasks and the Weekly tab
 - Weekly to-dos are rows in Tasks. `PIC` (people) is the owner of each to-do. `Events` (relation) links it to an event. `Week` (date) is the Monday of the week it was planned for.

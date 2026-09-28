@@ -10,14 +10,15 @@ import { apiFetch } from '@/lib/api';
 //
 // Single source of truth across views (Calendar & Events, Home, search),
 // loaded from GET /api/events (Notion Events only; meetings are useMeetings).
-// createEvent (POST) and saveEvent (PATCH) save to Notion. addEvent, rsvpEvent,
-// removeEvent and updateEvent only change this in-memory copy, so the UI hides
-// them (EVENT_FEATURES).
+// createEvent, saveEvent and deleteEvent save to Notion. rsvpEvent only
+// changes this in-memory copy, so the UI hides it (EVENT_FEATURES.rsvp).
 // ─────────────────────────────────────────────────────────────────────────────
 
 type EventDto = EventsResponse['events'][number];
 
 interface EventsResponse {
+  /** Organisers may delete events. */
+  canDelete: boolean;
   events: {
     id: string;
     title: string;
@@ -49,7 +50,15 @@ function toEvent(dto: EventDto): Event {
   };
 }
 
-const store = createApiStore<EventsResponse, Event[]>('events', (res) => res.events.map(toEvent), []);
+const store = createApiStore<EventsResponse, { events: Event[]; canDelete: boolean }>(
+  'events',
+  (res) => ({ events: res.events.map(toEvent), canDelete: res.canDelete }),
+  { events: [], canDelete: false }
+);
+
+function updateEvents(fn: (events: Event[]) => Event[]) {
+  store.update((v) => ({ ...v, events: fn(v.events) }));
+}
 
 /** A new Notion event. start/end are ISO dates (all day) or datetimes with offset; no start = TBA. */
 export interface NewEvent {
@@ -60,8 +69,10 @@ export interface NewEvent {
   status: EventStatus;
 }
 
-/** Date/time and location edits. start null = TBA; send start and end together. */
+/** Event edits. start null = TBA; send start and end together. */
 export interface EventEdit {
+  title?: string;
+  status?: EventStatus;
   start?: string | null;
   end?: string | null;
   location?: string | null;
@@ -76,24 +87,21 @@ export interface EventsResult extends AsyncResult<Event[]> {
   forMonth: (year: number, month: number) => Event[];
   /** Events grouped by category (always 'other': Notion has no category). */
   byCategory: Record<EventCategory, Event[]>;
-  /** Add an event to the in-memory store (not saved to Notion). */
-  addEvent: (event: Omit<Event, 'id'> & { id?: string }) => Event;
   /** Create an event in Notion and add it to the shared store. */
   createEvent: (input: NewEvent) => Promise<Event>;
-  /** Save date/time and/or location to Notion and update the shared store. */
+  /** Save title, status, date/time and/or location to Notion. */
   saveEvent: (id: string, edit: EventEdit) => Promise<Event>;
   /** Increment the RSVP count in memory (not saved to Notion). */
   rsvpEvent: (id: string) => void;
-  /** Remove an event from the in-memory store (not saved to Notion). */
-  removeEvent: (id: string) => void;
-  /** Alias for removeEvent */
-  deleteEvent: (id: string) => void;
-  /** Partial-update an event in the in-memory store (not saved to Notion). */
-  updateEvent: (id: string, patch: Partial<Event>) => void;
+  /** Move an event to Notion's trash (organisers only). */
+  deleteEvent: (id: string) => Promise<void>;
+  /** The signed-in member is an organiser and may delete events. */
+  canDelete: boolean;
 }
 
 export function useEvents(): EventsResult {
-  const { value: rawData, isLoading, error } = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  const { value, isLoading, error } = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  const rawData = value.events;
 
   useEffect(() => {
     store.ensureFresh();
@@ -101,19 +109,13 @@ export function useEvents(): EventsResult {
 
   const data = useMemo(() => [...rawData].sort(compareEvents), [rawData]);
 
-  const addEvent = useCallback((newEvent: Omit<Event, 'id'> & { id?: string }): Event => {
-    const event: Event = { ...newEvent, id: newEvent.id || `evt-${Date.now()}` };
-    store.update((events) => [event, ...events]);
-    return event;
-  }, []);
-
   const createEvent = useCallback(async (input: NewEvent): Promise<Event> => {
     const { event: dto } = await apiFetch<{ event: EventDto }>('events', {
       method: 'POST',
       body: JSON.stringify(input),
     });
     const event = toEvent(dto);
-    store.update((events) => [event, ...events]);
+    updateEvents((events) => [event, ...events]);
     return event;
   }, []);
 
@@ -123,20 +125,17 @@ export function useEvents(): EventsResult {
       body: JSON.stringify(edit),
     });
     const event = toEvent(dto);
-    store.update((events) => events.map((e) => (e.id === id ? event : e)));
+    updateEvents((events) => events.map((e) => (e.id === id ? event : e)));
     return event;
   }, []);
 
   const rsvpEvent = useCallback((id: string) => {
-    store.update((events) => events.map((e) => (e.id === id ? { ...e, rsvpCount: (e.rsvpCount || 0) + 1 } : e)));
+    updateEvents((events) => events.map((e) => (e.id === id ? { ...e, rsvpCount: (e.rsvpCount || 0) + 1 } : e)));
   }, []);
 
-  const removeEvent = useCallback((id: string) => {
-    store.update((events) => events.filter((e) => e.id !== id));
-  }, []);
-
-  const updateEvent = useCallback((id: string, patch: Partial<Event>) => {
-    store.update((events) => events.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  const deleteEvent = useCallback(async (id: string): Promise<void> => {
+    await apiFetch(`events?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    updateEvents((events) => events.filter((e) => e.id !== id));
   }, []);
 
   const upcoming = useMemo(() => data.filter((e) => isUpcoming(e)), [data]);
@@ -177,12 +176,10 @@ export function useEvents(): EventsResult {
     tba,
     forMonth,
     byCategory,
-    addEvent,
     createEvent,
     saveEvent,
     rsvpEvent,
-    removeEvent,
-    deleteEvent: removeEvent,
-    updateEvent,
+    deleteEvent,
+    canDelete: value.canDelete,
   };
 }

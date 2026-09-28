@@ -7,8 +7,8 @@ import { loadTeam } from './team.js';
 
 /** May assign tasks to other members (task requests). */
 export const ASSIGNER_ROLES = ['president', 'vice president', 'head of tech', 'tech lead'];
-/** May schedule meetings from the dashboard. */
-export const MEETING_ORGANISER_ROLES = ['president', 'vice president', 'secretary', 'head of tech', 'tech lead'];
+/** Organisers: may add, edit and delete meetings (and their minutes) and delete events. */
+export const ORGANISER_ROLES = ['president', 'vice president', 'secretary', 'head of tech', 'tech lead'];
 
 function normaliseRole(role: string | null | undefined): string {
   return (role ?? '').trim().toLowerCase();
@@ -25,3 +25,10 @@ export async function hasAnyRole(member: CommitteeMember, roles: string[]): Prom
   if (roles.includes(normaliseRole(member.role))) return true;
   return roles.includes(normaliseRole(await notionPositionFor(member)));
 }
+
+/** President, Vice President, Secretary, Head of Tech, or a dashboard admin. */
+export async function isOrganiser(member: CommitteeMember): Promise<boolean> {
+  return member.isAdmin || hasAnyRole(member, ORGANISER_ROLES);
+}
+
+export const ORGANISER_ONLY = 'Only the President, Vice President, Secretary and Head of Tech can do this';

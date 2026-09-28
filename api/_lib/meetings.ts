@@ -1,15 +1,16 @@
 // Team Dashboard > Meetings → the Meetings tab. A meeting's minutes are its
 // page body. Upcoming vs past is worked out from `Date` on the client; there's
-// no status property to go stale. Restructured by
+// no status property to go stale. Organisers (roles.ts) add, edit and delete. Restructured by
 // scripts/restructure-meetings-and-weeks.mjs.
 
 import type { PageObjectResponse } from '@notionhq/client';
 import type { CommitteeMember } from './auth.js';
 import { HttpError } from './http.js';
-import { cacheInvalidate, cached, dataSourceId, notion, queryAll } from './notion.js';
+import { cacheInvalidate, cached, dataSourceId, notion, queryAll, retrievePageIn } from './notion.js';
 import { dates } from './events.js';
 import { date, people, select, title, write } from './props.js';
-import { hasAnyRole, MEETING_ORGANISER_ROLES } from './roles.js';
+import { parseTimeline } from './eventWrites.js';
+import { isOrganiser, ORGANISER_ONLY } from './roles.js';
 import { notionUserIdFor } from './users.js';
 
 export interface MeetingDto {
@@ -46,11 +47,7 @@ export async function loadMeetings(): Promise<MeetingDto[]> {
   return (await meetingPages()).map(toMeeting);
 }
 
-export function canOrganiseMeetings(member: CommitteeMember): Promise<boolean> {
-  return hasAnyRole(member, MEETING_ORGANISER_ROLES);
-}
-
-// ── Create ───────────────────────────────────────────────────────────────────
+// ── Writes (organisers only: roles.ts) ───────────────────────────────────────
 
 export interface MeetingCreate {
   title?: unknown;
@@ -59,6 +56,17 @@ export interface MeetingCreate {
   /** HH:mm, Malaysia time */
   time?: unknown;
   notes?: unknown;
+  venue?: unknown;
+  type?: unknown;
+}
+
+export interface MeetingEdit {
+  title?: unknown;
+  /** Same rules as an event's Timeline: null = TBA; send start and end together. */
+  start?: unknown;
+  end?: unknown;
+  venue?: unknown;
+  type?: unknown;
 }
 
 function parseTitle(value: unknown): string {
@@ -82,18 +90,41 @@ function parseStart(dateValue: unknown, timeValue: unknown): string {
 function parseNotes(value: unknown): string {
   if (value === undefined || value === null) return '';
   if (typeof value !== 'string') throw new HttpError(400, 'Notes must be text');
-  if (value.length > 20_000) throw new HttpError(400, 'Notes must be 20,000 characters or fewer');
+  if (value.length > 100_000) throw new HttpError(400, 'Notes are too long');
   return value.trim();
 }
 
-/** Schedule a meeting. President, Vice President, Secretary and Head of Tech only. */
-export async function createMeeting(member: CommitteeMember, input: MeetingCreate): Promise<MeetingDto> {
-  if (!(await canOrganiseMeetings(member))) {
-    throw new HttpError(403, 'Only the President, Vice President, Secretary and Head of Tech can add meetings');
+/** Venue is a Notion select: a new name becomes a new option. null clears it. */
+function parseVenue(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' || value.trim().length > 100 || value.includes(',')) {
+    throw new HttpError(400, 'Venue must be text of 100 characters or fewer, without commas');
   }
+  return value.trim() || null;
+}
+
+/** Type must be one of the Notion options (JC / ExCo / Weekly Meeting). null clears it. */
+function parseType(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' || !MEETING_TYPES.includes(value)) throw new HttpError(400, `Type must be one of: ${MEETING_TYPES.join(', ')}`);
+  return value;
+}
+
+/** The Notion `Type` options, in Notion's order. */
+export const MEETING_TYPES = ['JC', 'ExCo', 'Weekly Meeting'];
+
+async function requireOrganiser(member: CommitteeMember) {
+  if (!(await isOrganiser(member))) throw new HttpError(403, ORGANISER_ONLY);
+}
+
+/** Schedule a meeting. Notes become the page body. */
+export async function createMeeting(member: CommitteeMember, input: MeetingCreate): Promise<MeetingDto> {
+  await requireOrganiser(member);
   const name = parseTitle(input.title);
   const start = parseStart(input.date, input.time);
   const notes = parseNotes(input.notes);
+  const venue = parseVenue(input.venue);
+  const type = parseType(input.type);
   const creatorId = await notionUserIdFor(member);
 
   const page = await notion().pages.create({
@@ -101,6 +132,8 @@ export async function createMeeting(member: CommitteeMember, input: MeetingCreat
     properties: {
       Name: write.title(name),
       Date: write.date(start),
+      Venue: write.select(venue),
+      Type: write.select(type),
       'Created By': write.people(creatorId ? [creatorId] : []),
     },
     ...(notes ? { markdown: notes } : {}),
@@ -109,4 +142,33 @@ export async function createMeeting(member: CommitteeMember, input: MeetingCreat
 
   if (!('properties' in page)) throw new HttpError(502, 'Notion did not return the new meeting');
   return toMeeting(page);
+}
+
+/** Edit a meeting's title, date/time (or TBA), venue and/or type. */
+export async function updateMeeting(member: CommitteeMember, id: string, edit: MeetingEdit): Promise<MeetingDto> {
+  const properties: Record<string, ReturnType<(typeof write)[keyof typeof write]>> = {};
+  if ('title' in edit) properties.Name = write.title(parseTitle(edit.title));
+  if ('start' in edit || 'end' in edit) {
+    const timeline = parseTimeline(edit.start, edit.end);
+    properties.Date = write.date(timeline.start, timeline.end);
+  }
+  if ('venue' in edit) properties.Venue = write.select(parseVenue(edit.venue));
+  if ('type' in edit) properties.Type = write.select(parseType(edit.type));
+  if (!Object.keys(properties).length) throw new HttpError(400, 'Nothing to update');
+
+  await requireOrganiser(member);
+  if (!(await retrievePageIn('meetings', id))) throw new HttpError(404, 'Meeting not found');
+  const page = await notion().pages.update({ page_id: id, properties });
+  cacheInvalidate('meetings:');
+
+  if (!('properties' in page)) throw new HttpError(502, 'Notion did not return the updated meeting');
+  return toMeeting(page);
+}
+
+/** Move a meeting (and its minutes) to Notion's trash, restorable there for 30 days. */
+export async function deleteMeeting(member: CommitteeMember, id: string): Promise<void> {
+  await requireOrganiser(member);
+  if (!(await retrievePageIn('meetings', id))) throw new HttpError(404, 'Meeting not found');
+  await notion().pages.update({ page_id: id, in_trash: true });
+  cacheInvalidate('meetings:');
 }

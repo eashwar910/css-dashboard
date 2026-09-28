@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
-import type { AsyncResult, Meeting, MeetingInput } from '@/lib/types';
+import type { AsyncResult, Meeting, MeetingEdit, MeetingInput } from '@/lib/types';
 import { createApiStore } from '@/lib/apiStore';
 import { eventStart, isTba, isUpcoming } from '@/lib/eventDates';
 import { apiFetch } from '@/lib/api';
@@ -9,7 +9,7 @@ import { apiFetch } from '@/lib/api';
 //
 // Team Dashboard > Meetings from GET /api/meetings, shared across views.
 // A meeting is upcoming until it's over (or while its date is TBA), then it
-// moves to the minutes list. createMeeting saves to Notion (POST).
+// moves to the minutes list. Organisers add, edit and delete them in Notion.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface MeetingDto {
@@ -26,7 +26,8 @@ interface MeetingDto {
 
 interface MeetingsResponse {
   meetings: MeetingDto[];
-  canCreate: boolean;
+  canManage: boolean;
+  types: string[];
 }
 
 function toMeeting(dto: MeetingDto): Meeting {
@@ -43,10 +44,10 @@ function toMeeting(dto: MeetingDto): Meeting {
   };
 }
 
-const store = createApiStore<MeetingsResponse, { meetings: Meeting[]; canCreate: boolean }>(
+const store = createApiStore<MeetingsResponse, { meetings: Meeting[]; canManage: boolean; types: string[] }>(
   'meetings',
-  (res) => ({ meetings: res.meetings.map(toMeeting), canCreate: res.canCreate }),
-  { meetings: [], canCreate: false }
+  (res) => ({ meetings: res.meetings.map(toMeeting), canManage: res.canManage, types: res.types }),
+  { meetings: [], canManage: false, types: [] }
 );
 
 function startMs(m: Meeting): number | null {
@@ -58,9 +59,14 @@ export interface MeetingsResult extends AsyncResult<Meeting[]> {
   upcoming: Meeting[];
   /** Over, most recent first: the meeting minutes. */
   past: Meeting[];
-  /** The President, Vice President, Secretary and Head of Tech can add meetings. */
-  canCreate: boolean;
+  /** The President, Vice President, Secretary, Head of Tech and admins can add, edit and delete meetings. */
+  canManage: boolean;
+  /** Notion `Type` options. */
+  types: string[];
   createMeeting: (input: MeetingInput) => Promise<Meeting>;
+  updateMeeting: (id: string, edit: MeetingEdit) => Promise<Meeting>;
+  /** Move to Notion's trash. */
+  deleteMeeting: (id: string) => Promise<void>;
 }
 
 export function useMeetings(): MeetingsResult {
@@ -103,5 +109,31 @@ export function useMeetings(): MeetingsResult {
     return meeting;
   }, []);
 
-  return { data: value.meetings, isLoading, error, upcoming, past, canCreate: value.canCreate, createMeeting };
+  const updateMeeting = useCallback(async (id: string, edit: MeetingEdit): Promise<Meeting> => {
+    const { meeting: dto } = await apiFetch<{ meeting: MeetingDto }>(`meetings?id=${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(edit),
+    });
+    const meeting = toMeeting(dto);
+    store.update((v) => ({ ...v, meetings: v.meetings.map((m) => (m.id === id ? meeting : m)) }));
+    return meeting;
+  }, []);
+
+  const deleteMeeting = useCallback(async (id: string): Promise<void> => {
+    await apiFetch(`meetings?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    store.update((v) => ({ ...v, meetings: v.meetings.filter((m) => m.id !== id) }));
+  }, []);
+
+  return {
+    data: value.meetings,
+    isLoading,
+    error,
+    upcoming,
+    past,
+    canManage: value.canManage,
+    types: value.types,
+    createMeeting,
+    updateMeeting,
+    deleteMeeting,
+  };
 }

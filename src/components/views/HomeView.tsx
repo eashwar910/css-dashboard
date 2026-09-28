@@ -83,7 +83,7 @@ export interface HomeViewProps {
 }
 
 export function HomeView({ onNavigate }: HomeViewProps = {}) {
-  const { upcoming: upcomingEvents, tba: tbaEvents, data: allEvents, isLoading: eventsLoading, error: eventsError, removeEvent } = useEvents();
+  const { upcoming: upcomingEvents, tba: tbaEvents, data: allEvents, isLoading: eventsLoading, error: eventsError, deleteEvent, canDelete } = useEvents();
   const { data: documents, byCategory: docsByCategory, isLoading: docsLoading, error: docsError, addDocument } = useDocuments();
   const [addDocOpen, setAddDocOpen] = useState(false);
   const { data: teamMembers } = useTeamMembers();
@@ -94,6 +94,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
   // Event shown in the detail dialog
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
 
   // Dated upcoming events (already sorted), then events with no date
@@ -429,7 +430,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
                           </span>
                         )}
                       </div>
-                      {EVENT_FEATURES.editing && (
+                      {canDelete && (
                         <button
                           type="button"
                           title="Delete event"
@@ -557,7 +558,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
                   Open in Events
                 </Button>
               )}
-              {EVENT_FEATURES.editing && selectedEvent && (
+              {canDelete && selectedEvent && (
                 <Button
                   type="button"
                   variant="outline"
@@ -590,12 +591,13 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
               Delete Event
             </AlertDialogTitle>
             <AlertDialogDescription className="text-xs text-muted-foreground">
-              Are you sure you want to remove &ldquo;{eventToDelete?.title}&rdquo;? This will remove the event from the calendar and schedule.
+              &ldquo;{eventToDelete?.title}&rdquo; will be moved to Notion&apos;s trash, along with its Overview. It can be restored from the trash in Notion for 30 days.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-4 gap-2">
             <AlertDialogCancel
               style={{ borderRadius: 0 }}
+              disabled={deleting}
               onClick={() => setEventToDelete(null)}
             >
               Cancel
@@ -603,21 +605,25 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
             <AlertDialogAction
               style={{ borderRadius: 0 }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (eventToDelete) {
-                  removeEvent(eventToDelete.id);
-                  if (selectedEvent?.id === eventToDelete.id) {
-                    setSelectedEvent(null);
-                  }
-                  toast({
-                    title: 'Event deleted',
-                    description: `"${eventToDelete.title}" has been removed.`,
-                  });
+              disabled={deleting}
+              onClick={async (e) => {
+                // Keep the dialog open until Notion confirms
+                e.preventDefault();
+                if (!eventToDelete) return;
+                setDeleting(true);
+                try {
+                  await deleteEvent(eventToDelete.id);
+                  if (selectedEvent?.id === eventToDelete.id) setSelectedEvent(null);
+                  toast({ title: 'Event deleted', description: `"${eventToDelete.title}" was moved to Notion's trash.` });
                   setEventToDelete(null);
+                } catch (err) {
+                  toast({ title: "Couldn't delete the event", description: (err as Error).message, variant: 'destructive' });
+                } finally {
+                  setDeleting(false);
                 }
               }}
             >
-              Delete Event
+              {deleting ? 'Deleting…' : 'Delete Event'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

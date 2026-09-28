@@ -8,14 +8,18 @@ import { useEffect, useState } from 'react';
 import { AlertCircle, Check, ExternalLink, Loader2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { RichTextEditor } from '@/components/RichTextEditor';
 import { useApiResource } from '@/hooks/useApiResource';
 import { apiFetch } from '@/lib/api';
 
-interface EventContentResponse {
+interface PageContentResponse {
   markdown: string;
-  /** Notion's own Markdown; only sent for events, which are editable. */
-  source?: string;
+  /** What the rich-text editor loads. */
+  editorMarkdown: string;
+  /** Notion's own Markdown; sent back as `base` so a save can't overwrite a newer edit. */
+  source: string;
   truncated: boolean;
+  canEdit: boolean;
 }
 
 type SaveState = { kind: 'idle' } | { kind: 'saving' } | { kind: 'saved' } | { kind: 'error'; message: string };
@@ -67,19 +71,27 @@ const components: Components = {
   td: ({ children }) => <td className="border border-border px-2.5 py-1.5 align-top [overflow-wrap:anywhere]">{children}</td>,
 };
 
-interface EventOverviewProps {
-  eventId: string;
+interface PageBodyProps {
+  /** Event or meeting page id. */
+  pageId: string;
   notionUrl?: string;
-  /** Show "Edit Overview" (upcoming and TBA events). Saves to the Notion page body. */
-  editable?: boolean;
+  /** What this page body is called, e.g. "Overview", "Notes", "Minutes". */
+  noun: string;
+  /** Shown when the page is empty. */
+  emptyText?: string;
 }
 
-/** The event's (or meeting's) Notion page content, rendered in place of an "Open in Notion" link. */
-export function EventOverview({ eventId, notionUrl, editable = false }: EventOverviewProps) {
-  const { data: loaded, isLoading, error } = useApiResource<EventContentResponse>(`event-content?id=${encodeURIComponent(eventId)}`);
+/**
+ * An event's Overview or a meeting's notes/minutes: the Notion page body,
+ * rendered, with a rich-text editor for members who may edit it.
+ */
+export function PageBody({ pageId, notionUrl, noun, emptyText }: PageBodyProps) {
+  const { data: loaded, isLoading, error } = useApiResource<PageContentResponse>(`event-content?id=${encodeURIComponent(pageId)}`);
   // The last saved version replaces what was loaded, so a save shows at once
-  const [saved, setSaved] = useState<EventContentResponse | null>(null);
+  const [saved, setSaved] = useState<PageContentResponse | null>(null);
   const data = saved ?? loaded;
+  const [editing, setEditing] = useState(false);
+  /** The edited document as Markdown; null until the first change. */
   const [draft, setDraft] = useState<string | null>(null);
   const [save, setSave] = useState<SaveState>({ kind: 'idle' });
 
@@ -90,21 +102,24 @@ export function EventOverview({ eventId, notionUrl, editable = false }: EventOve
     return () => clearTimeout(timer);
   }, [save]);
 
-  const canEdit = editable && data?.source !== undefined && !data.truncated;
+  const stopEditing = () => {
+    setEditing(false);
+    setDraft(null);
+  };
 
   const handleSave = async () => {
-    if (draft === null || data?.source === undefined) return;
+    if (draft === null || !data) return;
     setSave({ kind: 'saving' });
     try {
-      const result = await apiFetch<EventContentResponse>(`event-content?id=${encodeURIComponent(eventId)}`, {
+      const result = await apiFetch<PageContentResponse>(`event-content?id=${encodeURIComponent(pageId)}`, {
         method: 'PUT',
         body: JSON.stringify({ markdown: draft, base: data.source }),
       });
       setSaved(result);
-      setDraft(null);
+      stopEditing();
       setSave({ kind: 'saved' });
     } catch (err) {
-      // Keep the draft so nothing typed is lost
+      // Keep the editor open so nothing typed is lost
       setSave({ kind: 'error', message: (err as Error).message });
     }
   };
@@ -117,7 +132,7 @@ export function EventOverview({ eventId, notionUrl, editable = false }: EventOve
       className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-primary"
     >
       <ExternalLink className="h-3 w-3" />
-      Edit in Notion
+      Open in Notion
     </a>
   );
 
@@ -144,26 +159,21 @@ export function EventOverview({ eventId, notionUrl, editable = false }: EventOve
     );
   }
 
-  if (draft !== null) {
+  if (editing) {
     const saving = save.kind === 'saving';
     return (
       <div className="min-w-0 space-y-3">
-        <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground" htmlFor={`overview-${eventId}`}>
-          Overview (Markdown, saved to the event's Notion page)
-        </label>
-        <textarea
-          id={`overview-${eventId}`}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+        <RichTextEditor
+          initialMarkdown={data.editorMarkdown}
+          onChange={setDraft}
           disabled={saving}
-          rows={12}
-          style={{ borderRadius: 0 }}
-          className="w-full resize-y border border-border bg-background p-3 font-mono text-xs leading-relaxed text-foreground focus:border-primary focus:outline-none disabled:opacity-60"
+          label={noun}
+          placeholder={`Write the ${noun.toLowerCase()}…`}
         />
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" size="sm" style={{ borderRadius: 0 }} onClick={handleSave} disabled={saving || draft === data.source}>
+          <Button type="button" size="sm" style={{ borderRadius: 0 }} onClick={handleSave} disabled={saving || draft === null}>
             {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? 'Saving…' : `Save ${noun.toLowerCase()}`}
           </Button>
           <Button
             type="button"
@@ -172,7 +182,7 @@ export function EventOverview({ eventId, notionUrl, editable = false }: EventOve
             style={{ borderRadius: 0 }}
             disabled={saving}
             onClick={() => {
-              setDraft(null);
+              stopEditing();
               setSave({ kind: 'idle' });
             }}
           >
@@ -198,28 +208,28 @@ export function EventOverview({ eventId, notionUrl, editable = false }: EventOve
           </ReactMarkdown>
         </div>
       ) : (
-        <p className="text-xs italic text-muted-foreground">Nothing written on this page yet.</p>
+        <p className="text-xs italic text-muted-foreground">{emptyText ?? `No ${noun.toLowerCase()} yet.`}</p>
       )}
-      {data.truncated && <p className="text-xs text-muted-foreground">This page is long, so only the start is shown.</p>}
+      {data.truncated && <p className="text-xs text-muted-foreground">This page is long, so only the start is shown. Edit it in Notion.</p>}
       <div className="flex flex-wrap items-center gap-4">
-        {canEdit && (
+        {data.canEdit && (
           <button
             type="button"
             onClick={() => {
-              setDraft(data.source ?? '');
+              setEditing(true);
               setSave({ kind: 'idle' });
             }}
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-primary"
+            className="inline-flex items-center gap-1.5 border border-border px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-primary hover:text-primary"
           >
             <Pencil className="h-3 w-3" />
-            Edit Overview
+            {data.markdown ? `Edit ${noun.toLowerCase()}` : `Write ${noun.toLowerCase()}`}
           </button>
         )}
         {notionLink}
         {save.kind === 'saved' && (
           <span role="status" className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
             <Check className="h-3.5 w-3.5" />
-            Saved to Notion
+            Saved
           </span>
         )}
       </div>

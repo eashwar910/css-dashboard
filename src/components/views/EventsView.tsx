@@ -51,12 +51,12 @@ import { useTasks } from '@/hooks/useTasks';
 import { TbaTag } from '@/components/TbaTag';
 import { AddEventDialog } from '@/components/AddEventDialog';
 import { EpfPanel } from '@/components/EpfPanel';
-import { EventOverview } from '@/components/EventOverview';
+import { PageBody } from '@/components/PageBody';
 import { MonthCalendar, ViewModeToggle } from '@/components/MonthCalendar';
 import { EventWhenFields } from '@/components/EventWhenFields';
 import { buildTimeline, whenFromEvent, type WhenValue } from '@/lib/eventWhen';
 import { useEpfs } from '@/hooks/useEpfs';
-import { eventEnd, eventStart, formatEventDate, formatEventTimeRange, isTba, isUpcoming } from '@/lib/eventDates';
+import { eventEnd, eventStart, formatEventDate, formatEventTimeRange, isTba } from '@/lib/eventDates';
 
 /** Calendar chip colours, keyed by event progression status. */
 const STATUS_CHIP_CLASSES: Record<EventStatus, string> = {
@@ -70,11 +70,6 @@ const STATUS_LABELS: Record<EventStatus, string> = {
   'planning-in-progress': 'Planning in Progress',
   'done': 'Done',
 };
-
-/** Upcoming or TBA: its Overview, date and location can be edited from the dashboard. */
-function isEditable(event: Event) {
-  return isTba(event) || isUpcoming(event);
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // iCalendar (.ics) export generator
@@ -149,7 +144,8 @@ export function EventsView() {
   const { toast } = useToast();
 
   // Data layer hook acts as the single source of truth across the app
-  const { data: allEvents, tba: tbaEvents, isLoading, error, createEvent, rsvpEvent, removeEvent, updateEvent } = useEvents();
+  const { data: allEvents, tba: tbaEvents, isLoading, error, createEvent, rsvpEvent, saveEvent, deleteEvent, canDelete } = useEvents();
+  const [deleting, setDeleting] = useState(false);
 
   const { byEvent: epfsByEvent } = useEpfs();
 
@@ -316,7 +312,7 @@ export function EventsView() {
                               {STATUS_LABELS[event.status]}
                             </Badge>
                           )}
-                          {EVENT_FEATURES.editing && (
+                          {canDelete && (
                             <button
                               type="button"
                               title="Delete event"
@@ -388,11 +384,11 @@ export function EventsView() {
                 <DialogDescription className="text-xs text-muted-foreground">
                   {formatEventDate(activeSelectedEvent, 'EEEE, MMMM d, yyyy')}
                 </DialogDescription>
-                {isEditable(activeSelectedEvent) && !editingDetails && (
+                {!editingDetails && (
                   <button
                     type="button"
-                    title="Edit date, time and location"
-                    aria-label="Edit date, time and location"
+                    title="Edit name, date, time and location"
+                    aria-label="Edit name, date, time and location"
                     onClick={() => setEditingDetails(true)}
                     className="p-1 text-muted-foreground hover:text-primary transition-colors"
                   >
@@ -411,8 +407,6 @@ export function EventsView() {
               <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status:</span>
               {(['scheduled', 'planning-in-progress', 'done'] as EventStatus[]).map((s) => {
                 const isActive = (activeSelectedEvent.status ?? 'scheduled') === s;
-                // Read-only unless event editing is enabled: show just the current status.
-                if (!EVENT_FEATURES.editing && !isActive) return null;
                 const colors: Record<EventStatus, string> = {
                   'scheduled': 'border-border text-muted-foreground hover:border-foreground hover:text-foreground',
                   'planning-in-progress': 'border-amber-500/60 text-amber-600 hover:border-amber-500 hover:text-amber-600',
@@ -427,8 +421,13 @@ export function EventsView() {
                   <button
                     key={s}
                     type="button"
-                    disabled={!EVENT_FEATURES.editing}
-                    onClick={() => updateEvent(activeSelectedEvent.id, { status: s })}
+                    disabled={isActive}
+                    aria-pressed={isActive}
+                    onClick={() =>
+                      saveEvent(activeSelectedEvent.id, { status: s }).catch((err: unknown) =>
+                        toast({ title: "Couldn't change the status", description: (err as Error).message, variant: 'destructive' })
+                      )
+                    }
                     className={cn(
                       'border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors disabled:cursor-default',
                       isActive ? activeColors[s] : colors[s]
@@ -493,10 +492,11 @@ export function EventsView() {
               {/* ── OVERVIEW TAB ── */}
               {eventDetailTab === 'overview' && (
                 <>
-                  <EventOverview
-                    eventId={activeSelectedEvent.id}
+                  <PageBody
+                    key={activeSelectedEvent.id}
+                    pageId={activeSelectedEvent.id}
                     notionUrl={activeSelectedEvent.notionUrl}
-                    editable={isEditable(activeSelectedEvent)}
+                    noun="Overview"
                   />
                   {EVENT_FEATURES.description && activeSelectedEvent.description && (
                     <div className="space-y-1.5">
@@ -580,7 +580,7 @@ export function EventsView() {
                   Add to calendar (.ics)
                 </Button>
 
-                {EVENT_FEATURES.editing && (
+                {canDelete && (
                   <Button
                     type="button"
                     size="sm"
@@ -617,12 +617,13 @@ export function EventsView() {
               Delete Event
             </AlertDialogTitle>
             <AlertDialogDescription className="text-xs text-muted-foreground">
-              Are you sure you want to remove &ldquo;{eventToDelete?.title}&rdquo;? This will remove the event from the list and calendar.
+              &ldquo;{eventToDelete?.title}&rdquo; will be moved to Notion&apos;s trash, along with its Overview. It can be restored from the trash in Notion for 30 days.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-4 gap-2">
             <AlertDialogCancel
               style={{ borderRadius: 0 }}
+              disabled={deleting}
               onClick={() => setEventToDelete(null)}
             >
               Cancel
@@ -630,21 +631,25 @@ export function EventsView() {
             <AlertDialogAction
               style={{ borderRadius: 0 }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (eventToDelete) {
-                  removeEvent(eventToDelete.id);
-                  if (selectedEvent?.id === eventToDelete.id) {
-                    setSelectedEvent(null);
-                  }
-                  toast({
-                    title: 'Event deleted',
-                    description: `"${eventToDelete.title}" has been removed.`,
-                  });
+              disabled={deleting}
+              onClick={async (e) => {
+                // Keep the dialog open until Notion confirms
+                e.preventDefault();
+                if (!eventToDelete) return;
+                setDeleting(true);
+                try {
+                  await deleteEvent(eventToDelete.id);
+                  if (selectedEvent?.id === eventToDelete.id) closeEvent();
+                  toast({ title: 'Event deleted', description: `"${eventToDelete.title}" was moved to Notion's trash.` });
                   setEventToDelete(null);
+                } catch (err) {
+                  toast({ title: "Couldn't delete the event", description: (err as Error).message, variant: 'destructive' });
+                } finally {
+                  setDeleting(false);
                 }
               }}
             >
-              Delete Event
+              {deleting ? 'Deleting…' : 'Delete Event'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -655,19 +660,20 @@ export function EventsView() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EventDetailsEditor — date/time (or TBA) and location, saved to Notion
+// EventDetailsEditor — name, date/time (or TBA) and location, saved to Notion
 // ─────────────────────────────────────────────────────────────────────────────
 
 function EventDetailsEditor({ event, onDone }: { event: Event; onDone: () => void }) {
   const { saveEvent } = useEvents();
   const { toast } = useToast();
+  const [title, setTitle] = useState(event.title);
   const [when, setWhen] = useState<WhenValue>(() => whenFromEvent(event));
   const [location, setLocation] = useState(event.location ?? '');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const timeline = buildTimeline(when);
-  const canSave = typeof timeline !== 'string' && !saving;
+  const canSave = typeof timeline !== 'string' && title.trim() !== '' && !saving;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -675,7 +681,7 @@ function EventDetailsEditor({ event, onDone }: { event: Event; onDone: () => voi
     setSaving(true);
     setSaveError(null);
     try {
-      await saveEvent(event.id, { ...timeline, location: location.trim() || null });
+      await saveEvent(event.id, { title: title.trim(), ...timeline, location: location.trim() || null });
       toast({ title: 'Event updated', description: 'Saved to Notion.' });
       onDone();
     } catch (err) {
@@ -687,6 +693,18 @@ function EventDetailsEditor({ event, onDone }: { event: Event; onDone: () => voi
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 border border-border p-4">
+      <div className="space-y-1.5">
+        <Label htmlFor={`edit-${event.id}-title`} className="text-xs">Event name *</Label>
+        <Input
+          id={`edit-${event.id}-title`}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          maxLength={200}
+          disabled={saving}
+          style={{ borderRadius: 0 }}
+          required
+        />
+      </div>
       <EventWhenFields value={when} onChange={setWhen} idPrefix={`edit-${event.id}`} disabled={saving} />
       <div className="space-y-1.5">
         <Label htmlFor={`edit-${event.id}-location`} className="text-xs">

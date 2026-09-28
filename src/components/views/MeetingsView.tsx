@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,22 +12,40 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { AlertCircle, CalendarPlus, Clock, MapPin, Plus } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { AlertCircle, CalendarPlus, Clock, Loader2, MapPin, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMeetings } from '@/hooks/useMeetings';
-import { formatEventDate, formatEventTimeRange, isTba } from '@/lib/eventDates';
-import { EventOverview } from '@/components/EventOverview';
+import { formatEventDate, formatEventTimeRange, isTba, isUpcoming } from '@/lib/eventDates';
+import { buildTimeline, whenFromEvent, type WhenValue } from '@/lib/eventWhen';
+import { PageBody } from '@/components/PageBody';
+import { RichTextEditor } from '@/components/RichTextEditor';
 import { TbaTag } from '@/components/TbaTag';
+import { EventWhenFields } from '@/components/EventWhenFields';
 import { MonthCalendar, ViewModeToggle } from '@/components/MonthCalendar';
 import type { Meeting } from '@/lib/types';
 
 const MEETING_CHIP_CLASSES = 'border-sky-500/30 bg-sky-500/10 text-sky-700 hover:bg-sky-500/20 dark:text-sky-400';
 
+/** Not over yet (or date TBA): its page holds notes/agenda rather than minutes. */
+function isUpcomingMeeting(meeting: Meeting) {
+  return isTba(meeting) || isUpcoming(meeting);
+}
+
 /** Date, time, venue and type on one line. */
-function MeetingMeta({ meeting, datePattern }: { meeting: Meeting; datePattern: string }) {
+function MeetingMeta({ meeting }: { meeting: Meeting }) {
   return (
     <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-      {isTba(meeting) ? <TbaTag /> : <span>{formatEventDate(meeting, datePattern)}</span>}
+      {isTba(meeting) ? <TbaTag /> : <span>{formatEventDate(meeting, 'EEEE, MMMM d, yyyy')}</span>}
       {!isTba(meeting) && (
         <span className="flex items-center gap-1.5">
           <Clock className="h-3 w-3 shrink-0" />
@@ -52,12 +70,16 @@ function MeetingMeta({ meeting, datePattern }: { meeting: Meeting; datePattern: 
 /**
  * Meetings from Notion: upcoming ones first, then the minutes of past ones
  * (a meeting moves across once it's over). Optionally a month calendar.
+ * Organisers add, edit and delete meetings and write notes and minutes here.
  */
 export function MeetingsView() {
-  const { upcoming, past, data: allMeetings, isLoading, error, canCreate } = useMeetings();
+  const { upcoming, past, data: allMeetings, isLoading, error, canManage } = useMeetings();
   const [mode, setMode] = useState<'list' | 'calendar'>('list');
-  const [openMeeting, setOpenMeeting] = useState<Meeting | null>(null);
+  const [openMeetingId, setOpenMeetingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+
+  // Follow the store, so edits and deletes show in the open dialog
+  const openMeeting = allMeetings.find((m) => m.id === openMeetingId) ?? null;
 
   // Minutes: default to the most recent past meeting
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -70,12 +92,12 @@ export function MeetingsView() {
           <div>
             <h1 className="font-serif text-3xl font-semibold leading-tight sm:text-4xl">Meetings</h1>
             <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-              What's coming up, and the minutes from every meeting so far, from Notion.
+              What's coming up, and the minutes from every meeting so far.
             </p>
           </div>
           <div className="flex items-center gap-3">
             <ViewModeToggle mode={mode} onChange={setMode} />
-            {canCreate && (
+            {canManage && (
               <button
                 onClick={() => setCreating(true)}
                 style={{ borderRadius: 0 }}
@@ -98,7 +120,7 @@ export function MeetingsView() {
         <MonthCalendar
           items={allMeetings}
           isLoading={isLoading}
-          onSelect={setOpenMeeting}
+          onSelect={(m) => setOpenMeetingId(m.id)}
           chipClassName={() => MEETING_CHIP_CLASSES}
           noun="meetings"
         />
@@ -124,12 +146,12 @@ export function MeetingsView() {
                   <li key={m.id}>
                     <button
                       type="button"
-                      onClick={() => setOpenMeeting(m)}
+                      onClick={() => setOpenMeetingId(m.id)}
                       className="group w-full py-3 text-left transition-colors hover:bg-muted/10 sm:px-3"
                     >
                       <span className="block font-serif text-base font-semibold group-hover:text-primary">{m.title}</span>
                       <span className="mt-1 block">
-                        <MeetingMeta meeting={m} datePattern="EEEE, MMMM d, yyyy" />
+                        <MeetingMeta meeting={m} />
                       </span>
                     </button>
                   </li>
@@ -191,15 +213,7 @@ export function MeetingsView() {
 
                 {selected && (
                   <article className="min-w-0">
-                    <div className="border-b border-border pb-3">
-                      <h3 className="font-serif text-2xl font-semibold">{selected.title}</h3>
-                      <div className="mt-1.5">
-                        <MeetingMeta meeting={selected} datePattern="EEEE, MMMM d, yyyy" />
-                      </div>
-                    </div>
-                    <div className="pt-5">
-                      <EventOverview key={selected.id} eventId={selected.id} notionUrl={selected.notionUrl} />
-                    </div>
+                    <MeetingDetail key={selected.id} meeting={selected} canManage={canManage} headingLevel="h3" />
                   </article>
                 )}
               </div>
@@ -209,20 +223,20 @@ export function MeetingsView() {
       )}
 
       {/* ── One meeting (from Upcoming or the calendar) ─────────────── */}
-      <Dialog open={openMeeting !== null} onOpenChange={(open) => !open && setOpenMeeting(null)}>
+      <Dialog open={openMeeting !== null} onOpenChange={(open) => !open && setOpenMeetingId(null)}>
         {openMeeting && (
-          <DialogContent style={{ borderRadius: 0 }} className="max-h-[90vh] max-w-xl overflow-y-auto border-border">
-            <DialogHeader>
-              <DialogTitle className="font-serif text-2xl font-semibold">{openMeeting.title}</DialogTitle>
-              <DialogDescription asChild>
-                <div>
-                  <MeetingMeta meeting={openMeeting} datePattern="EEEE, MMMM d, yyyy" />
-                </div>
-              </DialogDescription>
+          <DialogContent style={{ borderRadius: 0 }} className="max-h-[90vh] max-w-2xl overflow-y-auto border-border">
+            <DialogHeader className="sr-only">
+              <DialogTitle>{openMeeting.title}</DialogTitle>
+              <DialogDescription>Meeting details, notes and minutes</DialogDescription>
             </DialogHeader>
-            <div className="min-w-0 border-t border-border pt-4 text-sm">
-              <EventOverview key={openMeeting.id} eventId={openMeeting.id} notionUrl={openMeeting.notionUrl} />
-            </div>
+            <MeetingDetail
+              key={openMeeting.id}
+              meeting={openMeeting}
+              canManage={canManage}
+              headingLevel="h2"
+              onDeleted={() => setOpenMeetingId(null)}
+            />
           </DialogContent>
         )}
       </Dialog>
@@ -233,7 +247,265 @@ export function MeetingsView() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NewMeetingDialog — President, Vice President, Secretary and Head of Tech
+// MeetingDetail — header, organiser actions, and the notes/minutes page body
+// ─────────────────────────────────────────────────────────────────────────────
+
+function MeetingDetail({
+  meeting,
+  canManage,
+  headingLevel,
+  onDeleted,
+}: {
+  meeting: Meeting;
+  canManage: boolean;
+  headingLevel: 'h2' | 'h3';
+  onDeleted?: () => void;
+}) {
+  const { deleteMeeting } = useMeetings();
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const Heading = headingLevel;
+  const upcoming = isUpcomingMeeting(meeting);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteMeeting(meeting.id);
+      toast({ title: 'Meeting deleted', description: `"${meeting.title}" was moved to Notion's trash.` });
+      setConfirmDelete(false);
+      onDeleted?.();
+    } catch (err) {
+      toast({ title: "Couldn't delete the meeting", description: (err as Error).message, variant: 'destructive' });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="min-w-0">
+      <div className="border-b border-border pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <Heading className="font-serif text-2xl font-semibold">{meeting.title}</Heading>
+          {canManage && !editing && (
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="flex items-center gap-1.5 border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+              >
+                <Pencil className="h-3 w-3" />
+                Edit details
+              </button>
+              <button
+                type="button"
+                title="Delete meeting"
+                aria-label={`Delete meeting ${meeting.title}`}
+                onClick={() => setConfirmDelete(true)}
+                className="p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="mt-1.5">
+          <MeetingMeta meeting={meeting} />
+        </div>
+        {meeting.createdBy && <p className="mt-1 text-[11px] text-muted-foreground">Added by {meeting.createdBy}</p>}
+      </div>
+
+      {editing && (
+        <div className="pt-4">
+          <MeetingDetailsEditor meeting={meeting} onDone={() => setEditing(false)} />
+        </div>
+      )}
+
+      <div className="pt-5">
+        <PageBody
+          key={meeting.id}
+          pageId={meeting.id}
+          notionUrl={meeting.notionUrl}
+          noun={upcoming ? 'Notes' : 'Minutes'}
+          emptyText={upcoming ? 'No notes or agenda yet.' : 'No minutes written yet.'}
+        />
+      </div>
+
+      <AlertDialog open={confirmDelete} onOpenChange={(open) => !deleting && setConfirmDelete(open)}>
+        <AlertDialogContent style={{ borderRadius: 0 }} className="border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-serif text-lg font-semibold">Delete meeting</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs text-muted-foreground">
+              &ldquo;{meeting.title}&rdquo; will be moved to Notion&apos;s trash, along with its notes and minutes. It can be restored from the trash in Notion for 30 days.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4 gap-2">
+            <AlertDialogCancel style={{ borderRadius: 0 }} disabled={deleting}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              style={{ borderRadius: 0 }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleting}
+              onClick={(e) => {
+                // Keep the dialog open until Notion confirms
+                e.preventDefault();
+                void handleDelete();
+              }}
+            >
+              {deleting ? 'Deleting…' : 'Delete meeting'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+/** Existing venues, for suggestions (Venue is a Notion select). */
+function useVenueOptions() {
+  const { data } = useMeetings();
+  return useMemo(
+    () => [...new Set(data.map((m) => m.location).filter((v): v is string => !!v))].sort((a, b) => a.localeCompare(b)),
+    [data]
+  );
+}
+
+function VenueAndTypeFields({
+  idPrefix,
+  venue,
+  onVenueChange,
+  type,
+  onTypeChange,
+  disabled,
+}: {
+  idPrefix: string;
+  venue: string;
+  onVenueChange: (venue: string) => void;
+  type: string;
+  onTypeChange: (type: string) => void;
+  disabled?: boolean;
+}) {
+  const { types } = useMeetings();
+  const venues = useVenueOptions();
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-1.5">
+        <Label htmlFor={`${idPrefix}-venue`} className="text-xs">
+          Venue <span className="text-muted-foreground">(optional)</span>
+        </Label>
+        <Input
+          id={`${idPrefix}-venue`}
+          value={venue}
+          onChange={(e) => onVenueChange(e.target.value.replace(/,/g, ''))}
+          list={`${idPrefix}-venues`}
+          placeholder="e.g. F4B09a, or Online"
+          maxLength={100}
+          disabled={disabled}
+          style={{ borderRadius: 0 }}
+        />
+        <datalist id={`${idPrefix}-venues`}>
+          {venues.map((v) => (
+            <option key={v} value={v} />
+          ))}
+        </datalist>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`${idPrefix}-type`} className="text-xs">
+          Type <span className="text-muted-foreground">(optional)</span>
+        </Label>
+        <select
+          id={`${idPrefix}-type`}
+          value={type}
+          onChange={(e) => onTypeChange(e.target.value)}
+          disabled={disabled}
+          style={{ borderRadius: 0 }}
+          className="flex h-9 w-full border border-input bg-background px-3 text-sm text-foreground focus:border-primary focus:outline-none"
+        >
+          <option value="">None</option>
+          {types.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MeetingDetailsEditor — name, date/time (or TBA), venue and type
+// ─────────────────────────────────────────────────────────────────────────────
+
+function MeetingDetailsEditor({ meeting, onDone }: { meeting: Meeting; onDone: () => void }) {
+  const { updateMeeting } = useMeetings();
+  const { toast } = useToast();
+  const [title, setTitle] = useState(meeting.title);
+  const [when, setWhen] = useState<WhenValue>(() => whenFromEvent(meeting));
+  const [venue, setVenue] = useState(meeting.location ?? '');
+  const [type, setType] = useState(meeting.type ?? '');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const timeline = buildTimeline(when);
+  const canSave = typeof timeline !== 'string' && title.trim() !== '' && !saving;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (typeof timeline === 'string' || !canSave) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await updateMeeting(meeting.id, { title: title.trim(), ...timeline, venue: venue.trim() || null, type: type || null });
+      toast({ title: 'Meeting updated', description: 'Saved.' });
+      onDone();
+    } catch (err) {
+      setSaveError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const idPrefix = `meeting-${meeting.id}`;
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 border border-border p-4">
+      <div className="space-y-1.5">
+        <Label htmlFor={`${idPrefix}-title`} className="text-xs">Title *</Label>
+        <Input
+          id={`${idPrefix}-title`}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          maxLength={200}
+          disabled={saving}
+          style={{ borderRadius: 0 }}
+          required
+        />
+      </div>
+      <EventWhenFields value={when} onChange={setWhen} idPrefix={idPrefix} disabled={saving} />
+      <VenueAndTypeFields idPrefix={idPrefix} venue={venue} onVenueChange={setVenue} type={type} onTypeChange={setType} disabled={saving} />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="submit" size="sm" style={{ borderRadius: 0 }} disabled={!canSave}>
+          {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
+        <Button type="button" size="sm" variant="ghost" style={{ borderRadius: 0 }} disabled={saving} onClick={onDone}>
+          Cancel
+        </Button>
+        {saveError && (
+          <span role="alert" className="flex items-center gap-1.5 text-xs text-destructive">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            Not saved: {saveError}
+          </span>
+        )}
+      </div>
+    </form>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NewMeetingDialog — organisers only
 // ─────────────────────────────────────────────────────────────────────────────
 
 function NewMeetingDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -242,6 +514,8 @@ function NewMeetingDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
   const [title, setTitle] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
+  const [venue, setVenue] = useState('');
+  const [type, setType] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -249,6 +523,8 @@ function NewMeetingDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
     setTitle('');
     setDate('');
     setTime('');
+    setVenue('');
+    setType('');
     setNotes('');
   };
 
@@ -265,8 +541,15 @@ function NewMeetingDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
     if (!canSave) return;
     setSaving(true);
     try {
-      await createMeeting({ title: title.trim(), date, time, notes: notes.trim() || undefined });
-      toast({ title: 'Meeting added', description: 'Saved to the Meetings database in Notion.' });
+      await createMeeting({
+        title: title.trim(),
+        date,
+        time,
+        venue: venue.trim() || null,
+        type: type || null,
+        notes: notes.trim() || undefined,
+      });
+      toast({ title: 'Meeting added', description: 'Open it to write the agenda or minutes.' });
       reset();
       onOpenChange(false);
     } catch (err) {
@@ -285,7 +568,7 @@ function NewMeetingDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
             New meeting
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Saved to the Meetings database in Notion. Notes go on the meeting's page, where the minutes are written.
+            You can write the agenda and minutes on the meeting once it's added.
           </DialogDescription>
         </DialogHeader>
 
@@ -312,19 +595,15 @@ function NewMeetingDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
               <Input id="meeting-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ borderRadius: 0 }} required />
             </div>
           </div>
+          <VenueAndTypeFields idPrefix="meeting-new" venue={venue} onVenueChange={setVenue} type={type} onTypeChange={setType} />
           <div className="space-y-1.5">
-            <Label htmlFor="meeting-notes" className="text-xs">
-              Notes <span className="text-muted-foreground">(optional, e.g. the agenda)</span>
-            </Label>
-            <textarea
-              id="meeting-notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={5}
-              maxLength={20000}
-              style={{ borderRadius: 0 }}
-              className="w-full resize-y border border-input bg-background p-3 text-sm text-foreground focus:border-primary focus:outline-none"
-            />
+            <p className="text-xs font-medium">
+              Notes <span className="font-normal text-muted-foreground">(optional, e.g. the agenda)</span>
+            </p>
+            {/* Remounted per dialog opening so it starts empty */}
+            {open && (
+              <RichTextEditor initialMarkdown="" onChange={setNotes} disabled={saving} label="Meeting notes" placeholder="Agenda, links, anything to prepare…" />
+            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" size="sm" style={{ borderRadius: 0 }} onClick={() => handleOpenChange(false)} disabled={saving}>

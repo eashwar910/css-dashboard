@@ -145,6 +145,17 @@ export interface MeetingInput {
   date: string;
   time: string;
   notes?: string;
+  venue?: string | null;
+  type?: string | null;
+}
+
+/** Meeting edits. start null = date TBA; send start and end together. */
+export interface MeetingEdit {
+  title?: string;
+  start?: string | null;
+  end?: string | null;
+  venue?: string | null;
+  type?: string | null;
 }
 
 // ── TeamMember ───────────────────────────────────────────────────────────────
