@@ -1,0 +1,102 @@
+// Document writes: add a row to Team Dashboard > Documents, either as a link
+// (`Document URL`) or as an uploaded file (`Document File`, via Notion's file
+// upload API). Uploaded files have no stable URL, so the dashboard links to
+// the Notion page, which shows the file.
+
+import type { CommitteeMember } from './auth.js';
+import { HttpError } from './http.js';
+import { cacheInvalidate, dataSourceId, notion } from './notion.js';
+import { write } from './props.js';
+import { toDocument, type DocumentDto } from './documents.js';
+import { notionUserIdFor } from './users.js';
+
+/** Vercel caps request bodies at 4.5 MB, so files must fit under that. */
+export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+
+export interface DocumentCreate {
+  name?: unknown;
+  type?: unknown;
+  url?: unknown;
+}
+
+export interface DocumentFile {
+  filename: string;
+  contentType: string;
+  data: Buffer;
+}
+
+function parseName(value: unknown): string {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) throw new HttpError(400, 'Name is required');
+  if (text.length > 200) throw new HttpError(400, 'Name must be 200 characters or fewer');
+  return text;
+}
+
+/** Optional `Document Type`. Notion creates a new select option if it's unknown. */
+function parseType(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' || value.trim().length > 100) throw new HttpError(400, 'Type must be text of 100 characters or fewer');
+  return value.trim();
+}
+
+function parseUrl(value: unknown): string {
+  if (typeof value !== 'string') throw new HttpError(400, 'Link is required');
+  let parsed: URL;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    throw new HttpError(400, 'Link must be a full URL starting with http:// or https://');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new HttpError(400, 'Link must start with http:// or https://');
+  }
+  return parsed.toString();
+}
+
+/**
+ * Create a Documents row. With `file`, the bytes are uploaded to Notion first
+ * and attached to `Document File`; otherwise `input.url` is required.
+ */
+export async function createDocument(
+  member: CommitteeMember,
+  input: DocumentCreate,
+  file?: DocumentFile,
+): Promise<DocumentDto> {
+  const name = parseName(input.name);
+  const type = parseType(input.type);
+  const link = file ? null : parseUrl(input.url);
+
+  let fileUploadId: string | null = null;
+  if (file) {
+    if (file.data.length === 0) throw new HttpError(400, 'The file is empty');
+    if (file.data.length > MAX_UPLOAD_BYTES) throw new HttpError(413, 'Files must be 4 MB or smaller');
+    const upload = await notion().fileUploads.create({
+      mode: 'single_part',
+      filename: file.filename,
+      content_type: file.contentType,
+    });
+    await notion().fileUploads.send({
+      file_upload_id: upload.id,
+      file: { filename: file.filename, data: new Blob([file.data], { type: file.contentType }) },
+    });
+    fileUploadId = upload.id;
+  }
+
+  const authorId = await notionUserIdFor(member);
+  const page = await notion().pages.create({
+    parent: { type: 'data_source_id', data_source_id: dataSourceId('documents') },
+    properties: {
+      Name: write.title(name),
+      'Document Type': write.select(type),
+      'Document URL': { url: link },
+      Author: write.people(authorId ? [authorId] : []),
+      ...(fileUploadId && file
+        ? { 'Document File': { files: [{ type: 'file_upload', file_upload: { id: fileUploadId }, name: file.filename }] } }
+        : {}),
+    },
+  });
+  cacheInvalidate('documents:');
+
+  if (!('properties' in page)) throw new HttpError(502, 'Notion did not return the new document');
+  return toDocument(page);
+}

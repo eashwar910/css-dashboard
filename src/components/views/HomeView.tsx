@@ -40,12 +40,15 @@ import {
   X,
   AlertCircle,
   Trash2,
+  HardDrive,
+  Plus,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Event } from '@/lib/types';
 import type { View } from '@/components/Navbar';
 import { EVENT_FEATURES } from '@/lib/features';
 import { TbaTag } from '@/components/TbaTag';
+import { AddDocumentDialog } from '@/components/AddDocumentDialog';
 import { eventKindLabel, formatEventDate, formatEventTimeRange, isTba } from '@/lib/eventDates';
 
 import { useEvents } from '@/hooks/useEvents';
@@ -65,13 +68,24 @@ const iconMap: Record<string, React.ElementType> = {
   Presentation,
 };
 
+/** Always shown first in Quick Access, above the Notion documents. */
+const PINNED_LINKS = [
+  {
+    id: 'google-drive',
+    name: 'Google Drive',
+    url: 'https://drive.google.com/drive/folders/1XO-T3__mMU5ibk8MICyYNTNMO3lT0ZfP?usp=sharing',
+    icon: HardDrive,
+  },
+];
+
 export interface HomeViewProps {
   onNavigate?: (view: View) => void;
 }
 
 export function HomeView({ onNavigate }: HomeViewProps = {}) {
   const { upcoming: upcomingEvents, tba: tbaEvents, data: allEvents, isLoading: eventsLoading, error: eventsError, removeEvent } = useEvents();
-  const { data: documents, isLoading: docsLoading, error: docsError } = useDocuments();
+  const { data: documents, byCategory: docsByCategory, isLoading: docsLoading, error: docsError, addDocument } = useDocuments();
+  const [addDocOpen, setAddDocOpen] = useState(false);
   const { data: teamMembers } = useTeamMembers();
 
   // Search input state
@@ -267,7 +281,32 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
       <section>
         <div className="mb-4 flex items-baseline justify-between border-b border-border pb-2">
           <h2 className="font-serif text-lg font-semibold">Quick Access</h2>
-          <span className="text-xs text-muted-foreground">Notion documents</span>
+          <button
+            type="button"
+            onClick={() => setAddDocOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-primary"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add document
+          </button>
+        </div>
+
+        {/* Pinned links: always visible, even while Notion documents load */}
+        <div className="divide-y divide-border border-b border-border">
+          {PINNED_LINKS.map((link) => (
+            <a
+              key={link.id}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex w-full items-center gap-4 py-3 text-left transition-colors hover:text-primary"
+            >
+              <link.icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover:text-primary" />
+              <span className="flex-1 text-sm">{link.name}</span>
+              <span className="hidden text-xs text-muted-foreground sm:inline">Pinned</span>
+              <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+            </a>
+          ))}
         </div>
 
         {docsLoading ? (
@@ -287,7 +326,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
           </div>
         ) : documents.length === 0 ? (
           <p className="py-4 text-xs text-muted-foreground">
-            No documents available in workspace.
+            No Notion documents yet. Use "Add document" to upload one.
           </p>
         ) : (
           <div className="divide-y divide-border">
@@ -313,6 +352,13 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
           </div>
         )}
       </section>
+
+      <AddDocumentDialog
+        open={addDocOpen}
+        onOpenChange={setAddDocOpen}
+        onAdd={addDocument}
+        types={Object.keys(docsByCategory).filter((t) => t !== 'Uncategorised')}
+      />
 
       {/* ── Main grid ───────────────────────────────────────────────── */}
       <div>
