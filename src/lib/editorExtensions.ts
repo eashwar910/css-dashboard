@@ -42,7 +42,8 @@ if (!proto.__notionPatched) {
     const encoded = original.call(this, text, node, parent);
     // Code contexts come back unchanged; only re-encode normal text
     if (encoded === text) return encoded;
-    return this.escapeMarkdownSyntax(text.replace(/[<>]/g, '\\$&'));
+    // Escape < > after Markdown escaping, or their backslashes would be escaped too
+    return this.escapeMarkdownSyntax(text).replace(/[<>]/g, '\\$&');
   };
   proto.__notionPatched = true;
 }

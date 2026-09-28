@@ -181,6 +181,7 @@
    Mirrors the read-only page body styling in EventOverview.tsx. */
 @layer components {
   .rich-text > * + * { @apply mt-2; }
+  .rich-text > :first-child { @apply mt-0; }
   .rich-text h1 { @apply mt-5 font-serif text-lg font-semibold; }
   .rich-text h2 { @apply mt-5 font-serif text-base font-semibold; }
   .rich-text h3 { @apply mt-4 text-sm font-semibold; }

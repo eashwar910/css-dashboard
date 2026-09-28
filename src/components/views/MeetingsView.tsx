@@ -286,7 +286,8 @@ function MeetingDetail({
   return (
     <div className="min-w-0">
       <div className="border-b border-border pb-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        {/* In the dialog, keep the actions clear of its close button */}
+        <div className={cn('flex flex-wrap items-start justify-between gap-3', onDeleted && 'pr-6')}>
           <Heading className="font-serif text-2xl font-semibold">{meeting.title}</Heading>
           {canManage && !editing && (
             <div className="flex shrink-0 items-center gap-1">
