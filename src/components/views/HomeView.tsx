@@ -51,7 +51,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import type { Event, Task } from '@/lib/types';
 import { TaskEditDialog } from '@/components/TaskEditDialog';
-import type { View } from '@/components/Sidebar';
+import type { View } from '@/components/Navbar';
 import { EVENT_FEATURES } from '@/lib/features';
 import { TbaTag } from '@/components/TbaTag';
 import { eventKindLabel, formatEventDate, formatEventTimeRange, isTba, parseDate } from '@/lib/eventDates';
@@ -78,34 +78,6 @@ const iconMap: Record<string, React.ElementType> = {
   Briefcase,
   Presentation,
 };
-
-interface Announcement {
-  id: string;
-  title: string;
-  content: string;
-}
-
-// Hard-coded on purpose: there is no Notion source for announcements yet.
-const announcements: Announcement[] = [
-  {
-    id: 'ann-1',
-    title: 'Lab 2B Access PIN Updated',
-    content:
-      'The door code for the society hardware lab has been updated for Michaelmas term. Check the Discord #announcements channel for the new PIN.',
-  },
-  {
-    id: 'ann-2',
-    title: 'Budget Reimbursement Submissions',
-    content:
-      'Please submit all receipts and expense forms for recent event catering to the Treasurer before Friday 5 PM.',
-  },
-  {
-    id: 'ann-3',
-    title: 'Nottshack Mentor Signups Open',
-    content:
-      'We are looking for upper-year students and alumni mentors to assist beginner hacker teams during the upcoming annual hackathon.',
-  },
-];
 
 export interface HomeViewProps {
   onNavigate?: (view: View) => void;
@@ -202,18 +174,9 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
   return (
     <div className="space-y-12 sm:space-y-14">
 
-      {/* ── Page header with Search ──────────────────────────────────── */}
+      {/* ── Search ───────────────────────────────────────────────────── */}
       <header className="border-b border-border pb-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="font-serif text-3xl font-semibold leading-tight text-foreground sm:text-4xl">
-              Welcome back
-            </h1>
-            <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-              Here's what's happening in the Computer Science Society this week.
-            </p>
-          </div>
-
+        <div className="flex justify-end">
           {/* Search input filtering across events, documents, members */}
           <div className="relative w-full sm:w-72">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -519,7 +482,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
           )}
         </section>
 
-        {/* ── Right column (2 cols): Weekly To-Do & Announcements ───── */}
+        {/* ── Right column (2 cols): Weekly To-Do ─────────────────────── */}
         <div className="space-y-10 lg:col-span-2">
 
           {/* ── Weekly To-Do ────────────────────────────────────────── */}
@@ -642,27 +605,6 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
             )}
 
             <TaskEditDialog task={editingTask} onOpenChange={(open) => !open && setEditingTask(null)} />
-          </section>
-
-          {/* ── Announcements ───────────────────────────────────────── */}
-          <section>
-            <div className="mb-4 flex items-baseline justify-between border-b border-border pb-2">
-              <h2 className="font-serif text-lg font-semibold">Announcements</h2>
-              <span className="text-xs text-muted-foreground">Notices</span>
-            </div>
-
-            <div className="divide-y divide-border">
-              {announcements.map((notice) => (
-                <article key={notice.id} className="py-3">
-                  <h3 className="text-sm font-medium text-foreground">
-                    {notice.title}
-                  </h3>
-                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    {notice.content}
-                  </p>
-                </article>
-              ))}
-            </div>
           </section>
 
         </div>

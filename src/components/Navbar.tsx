@@ -1,0 +1,158 @@
+import { useState } from 'react';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
+import { Code2, Home, CalendarDays, Users, Wallet, Menu, LogOut, Sun, Moon } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { useTheme } from '@/components/ThemeProvider';
+
+export type View = 'home' | 'calendar' | 'team' | 'finance';
+
+interface NavbarProps {
+  currentView: View;
+  onNavigate: (view: View) => void;
+}
+
+const navItems: { id: View; label: string; icon: typeof Home }[] = [
+  { id: 'home', label: 'Home', icon: Home },
+  { id: 'calendar', label: 'Calendar & Events', icon: CalendarDays },
+  { id: 'team', label: 'Team Directory', icon: Users },
+  { id: 'finance', label: 'Finance', icon: Wallet },
+];
+
+function ThemeToggleButton() {
+  const { theme, toggleTheme } = useTheme();
+  return (
+    <button
+      onClick={toggleTheme}
+      aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      style={{ borderRadius: 0 }}
+      className="flex h-8 w-8 shrink-0 items-center justify-center border border-border bg-background text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+    >
+      {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    </button>
+  );
+}
+
+export function Navbar({ currentView, onNavigate }: NavbarProps) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const { user, member, signOut } = useAuth();
+  const displayName = member?.full_name ?? user?.email;
+
+  return (
+    <header className="sticky top-0 z-30 border-b border-border bg-background">
+      <div className="mx-auto flex h-14 max-w-5xl items-center gap-8 px-5 sm:px-12 lg:px-16">
+        {/* Masthead */}
+        <div className="flex shrink-0 items-center gap-2">
+          <Code2 className="h-4 w-4 text-primary shrink-0" />
+          <span className="font-serif text-base font-semibold tracking-tight">CS Society</span>
+        </div>
+
+        {/* Desktop navigation — plain text links, active one underlined */}
+        <nav className="hidden h-full flex-1 lg:block">
+          <ul className="flex h-full items-stretch gap-6">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const active = currentView === item.id;
+              return (
+                <li key={item.id}>
+                  <button
+                    onClick={() => onNavigate(item.id)}
+                    className={cn(
+                      '-mb-px flex h-full items-center gap-2 border-b-2 text-sm transition-colors',
+                      active
+                        ? 'border-primary text-primary font-medium'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                    )}
+                    aria-current={active ? 'page' : undefined}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                    {item.label}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        {/* Desktop account — signed-in member, log out, theme toggle */}
+        <div className="hidden shrink-0 items-center gap-4 lg:flex">
+          <div className="min-w-0 max-w-[12rem] text-right">
+            <p className="truncate text-sm font-medium leading-tight">{displayName}</p>
+            {member?.role && (
+              <p className="truncate text-xs text-muted-foreground">{member.role}</p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={signOut}
+            aria-label="Log out"
+            title="Log out"
+            className="text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
+          <ThemeToggleButton />
+        </div>
+
+        {/* Mobile: theme toggle + menu */}
+        <div className="ml-auto flex items-center gap-2 lg:hidden">
+          <ThemeToggleButton />
+          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Open menu">
+                <Menu className="h-4 w-4" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="top" className="p-0">
+              <SheetTitle className="sr-only">Navigation menu</SheetTitle>
+              <nav className="px-5 pb-2 pt-12">
+                <ul>
+                  {navItems.map((item) => {
+                    const Icon = item.icon;
+                    const active = currentView === item.id;
+                    return (
+                      <li key={item.id} className="rule">
+                        <button
+                          onClick={() => {
+                            onNavigate(item.id);
+                            setMobileOpen(false);
+                          }}
+                          className={cn(
+                            'flex w-full items-center gap-3 py-2.5 text-sm transition-colors text-left',
+                            active
+                              ? 'text-primary font-medium'
+                              : 'text-muted-foreground hover:text-foreground'
+                          )}
+                          aria-current={active ? 'page' : undefined}
+                        >
+                          <Icon className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                          {item.label}
+                        </button>
+                      </li>
+                    );
+                  })}
+                  <li className="rule" />
+                </ul>
+              </nav>
+              <div className="px-5 py-4">
+                <p className="truncate text-sm font-medium">{displayName}</p>
+                {member?.role && (
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">{member.role}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={signOut}
+                  className="mt-3 flex items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <LogOut className="h-3.5 w-3.5 shrink-0" />
+                  Log Out
+                </button>
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
+      </div>
+    </header>
+  );
+}

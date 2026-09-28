@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { useTheme } from '@/components/ThemeProvider';
-import { Sidebar, type View } from '@/components/Sidebar';
+import { Navbar, type View } from '@/components/Navbar';
 import { HomeView } from '@/components/views/HomeView';
 import { CalendarView } from '@/components/views/CalendarView';
 import { TeamView } from '@/components/views/TeamView';
@@ -36,9 +36,9 @@ function Dashboard() {
   const [view, setView] = useState<View>('home');
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar currentView={view} onNavigate={setView} />
-      <main className="flex-1 overflow-y-auto scrollbar-thin">
+    <div className="flex min-h-screen flex-col bg-background">
+      <Navbar currentView={view} onNavigate={setView} />
+      <main className="flex-1">
         <div className="mx-auto max-w-5xl px-8 py-10 sm:px-12 lg:px-16">
           {view === 'home' && <HomeView onNavigate={setView} />}
           {view === 'calendar' && <CalendarView />}
@@ -69,11 +69,20 @@ function AuthGate() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <p className="text-xs text-muted-foreground">Loading…</p>
+        <ThemeToggle />
       </div>
     );
   }
 
-  return session ? <Dashboard /> : <LoginView />;
+  // The dashboard's navbar carries its own theme toggle.
+  return session ? (
+    <Dashboard />
+  ) : (
+    <>
+      <LoginView />
+      <ThemeToggle />
+    </>
+  );
 }
 
 function App() {
@@ -81,7 +90,6 @@ function App() {
     <ThemeProvider>
       <AuthProvider>
         <AuthGate />
-        <ThemeToggle />
         <Toaster />
       </AuthProvider>
     </ThemeProvider>
