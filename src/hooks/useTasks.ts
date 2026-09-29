@@ -89,18 +89,34 @@ function replaceTask(task: Task) {
   store.update((v) => ({ ...v, tasks: v.tasks.map((t) => (t.id === task.id ? task : t)) }));
 }
 
-/** Tick/untick. Optimistic; rolls back and rethrows if the server refuses. */
+/** Ticks being saved: task id → the `completed` value being sent. */
+const saving = new Map<string, boolean>();
+
+/** Show in-flight ticks over whatever the store holds, so a reload can't flip them back. */
+function withSaving(task: Task): Task {
+  const completed = saving.get(task.id);
+  return completed === undefined ? task : { ...task, completed, status: completed ? 'done' : 'todo', saving: true };
+}
+
+/**
+ * Tick/untick. Optimistic; rolls back and rethrows if the server refuses.
+ * Clicks on a task that's still saving are ignored, so saves never overlap.
+ */
 async function setCompleted(id: string, completed: boolean): Promise<void> {
+  if (saving.has(id)) return;
   const before = store.getSnapshot().value.tasks.find((t) => t.id === id);
   if (!before) return;
+  saving.set(id, completed);
   replaceTask({ ...before, completed, status: completed ? 'done' : 'todo' });
   try {
     const { task } = await apiFetch<{ task: TaskDto }>(`tasks?id=${encodeURIComponent(id)}`, {
       method: 'PATCH',
       body: JSON.stringify({ completed }),
     });
+    saving.delete(id);
     replaceTask(toTask(task));
   } catch (err) {
+    saving.delete(id);
     replaceTask(before);
     throw err;
   }
@@ -218,13 +234,14 @@ export interface TasksResult extends AsyncResult<Task[]> {
 
 export function useTasks(): TasksResult {
   const { value, isLoading, error } = useSyncExternalStore(store.subscribe, store.getSnapshot);
-  const data = value.tasks;
+  const data = useMemo(() => (saving.size ? value.tasks.map(withSaving) : value.tasks), [value.tasks]);
 
   useEffect(() => {
     store.ensureFresh();
   }, []);
 
   const toggleTask = useCallback((id: string) => {
+    if (saving.has(id)) return Promise.resolve();
     const task = store.getSnapshot().value.tasks.find((t) => t.id === id);
     return task ? setCompleted(id, !task.completed) : Promise.resolve();
   }, []);

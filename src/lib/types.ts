@@ -44,6 +44,8 @@ export interface Task {
   lastWeek: boolean;
   /** What the signed-in member may do. The server re-checks every write. */
   can: { toggle: boolean; edit: boolean; delete: boolean };
+  /** A tick/untick is being saved; `completed` shows the value being saved. */
+  saving?: boolean;
 }
 
 /** Fields that can be sent when creating or editing a task. null clears a field. */

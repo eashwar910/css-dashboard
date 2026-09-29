@@ -23,6 +23,8 @@ export function createApiStore<TResponse, T>(
 ) {
   let state: ApiStoreState<T> = { value: initial, isLoading: true, error: null, loadedAt: 0 };
   let inflight: Promise<void> | null = null;
+  // Bumped by every local `update`; a load that started before one is stale.
+  let version = 0;
   const listeners = new Set<() => void>();
 
   const setState = (patch: Partial<ApiStoreState<T>>) => {
@@ -31,8 +33,12 @@ export function createApiStore<TResponse, T>(
   };
 
   const load = (): Promise<void> => {
+    const startedAt = version;
     inflight ??= apiFetch<TResponse>(path)
-      .then((res) => setState({ value: map(res), error: null, loadedAt: Date.now() }))
+      .then((res) => {
+        // Don't clobber local edits made while this request was in flight.
+        if (version === startedAt) setState({ value: map(res), error: null, loadedAt: Date.now() });
+      })
       .catch((err: unknown) => {
         console.error(`Failed to load /api/${path}`, err);
         setState({ error: err instanceof Error ? err : new Error(String(err)) });
@@ -59,6 +65,7 @@ export function createApiStore<TResponse, T>(
     reload: load,
     /** Replace the value locally (not saved anywhere). */
     update(fn: (value: T) => T) {
+      version++;
       setState({ value: fn(state.value) });
     },
   };
