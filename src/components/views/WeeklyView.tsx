@@ -5,7 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Pencil, Plus, AlertCircle, Loader2 } from 'lucide-react';
+import { Pencil, Plus, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTasks, type PersonGroup } from '@/hooks/useTasks';
 import type { Task } from '@/lib/types';
@@ -29,28 +29,24 @@ function weekRange(startIso: string | null) {
 
 function TaskRow({ task, onToggle, onEdit }: { task: Task; onToggle: (id: string) => void; onEdit: (task: Task) => void }) {
   const due = formatDueDate(task.dueDate);
-  const canToggle = task.can.toggle && !task.saving;
   return (
     <li className="group flex items-start gap-1">
       <label
         className={cn(
           'flex min-w-0 flex-1 items-start gap-3 py-2.5 transition-colors',
-          canToggle ? 'cursor-pointer hover:text-primary' : task.saving ? 'cursor-wait' : 'cursor-default'
+          task.can.toggle ? 'cursor-pointer hover:text-primary' : 'cursor-default'
         )}
         title={task.can.toggle ? undefined : 'Only the PIC or an admin can tick this'}
         aria-busy={task.saving || undefined}
       >
-        {task.saving ? (
-          <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary" aria-label="Saving" />
-        ) : (
-          <Checkbox
-            checked={task.completed}
-            disabled={!canToggle}
-            onCheckedChange={() => onToggle(task.id)}
-            className="mt-0.5 shrink-0"
-            aria-label={task.completed ? `Mark "${task.title}" not done` : `Mark "${task.title}" done`}
-          />
-        )}
+        {/* While saving, the box itself spins; clicks are ignored until it settles. */}
+        <Checkbox
+          checked={task.completed}
+          disabled={!task.can.toggle}
+          onCheckedChange={() => onToggle(task.id)}
+          className={cn('mt-0.5 shrink-0', task.saving && 'animate-spin')}
+          aria-label={task.completed ? `Mark "${task.title}" not done` : `Mark "${task.title}" done`}
+        />
         <div className="min-w-0 flex-1">
           <span className={cn('text-sm leading-snug', task.completed ? 'text-muted-foreground line-through' : 'text-foreground')}>
             {task.title}
