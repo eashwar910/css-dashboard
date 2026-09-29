@@ -6,8 +6,8 @@ import { useApiResource } from '@/hooks/useApiResource';
 // useTeamMembers
 //
 // Returns all ExCo members from GET /api/team plus grouping helpers.
-// department, year, email and avatarUrl are optional: members without them
-// are left out of byDepartment / byYear but still appear in `data`.
+// year, email and avatarUrl are optional: members without a year are left
+// out of byYear but still appear in `data`.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface TeamResponse {
@@ -16,15 +16,12 @@ interface TeamResponse {
     name: string;
     role: string | null;
     avatarUrl: string | null;
-    department: string | null;
     year: string | null;
     email: string | null;
   }[];
 }
 
 export interface TeamMembersResult extends AsyncResult<TeamMember[]> {
-  /** Members grouped by department (members with no department are omitted). */
-  byDepartment: Record<string, TeamMember[]>;
   /** Members grouped by year label (members with no year are omitted). */
   byYear: Record<string, TeamMember[]>;
   /** Quick lookup by member id. */
@@ -49,7 +46,6 @@ export function useTeamMembers(): TeamMembersResult {
         id: m.id,
         name: m.name,
         role: m.role ?? '',
-        department: m.department ?? undefined,
         year: m.year ?? undefined,
         email: m.email ?? undefined,
         avatarUrl: m.avatarUrl ?? undefined,
@@ -57,7 +53,6 @@ export function useTeamMembers(): TeamMembersResult {
     [response]
   );
 
-  const byDepartment = useMemo(() => groupBy(data, (m) => m.department), [data]);
   const byYear = useMemo(() => groupBy(data, (m) => m.year), [data]);
   const byId = useMemo(
     () =>
@@ -72,7 +67,6 @@ export function useTeamMembers(): TeamMembersResult {
     data,
     isLoading,
     error,
-    byDepartment,
     byYear,
     byId,
   };

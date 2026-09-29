@@ -13,7 +13,6 @@ export interface TeamMemberDto {
   role: string | null;
   /** Notion-hosted picture URL. Expires after about an hour, so never cache it longer than the 60s cache. */
   avatarUrl: string | null;
-  department: string | null;
   year: string | null;
   /** From Supabase committee_members, matched on full_name. null when unmatched or the service key is missing. */
   email: string | null;
@@ -27,7 +26,6 @@ export function toTeamMember(page: PageObjectResponse, emailsByName: Map<string,
     name,
     role: richText(page, 'Position'),
     avatarUrl: files(page, 'Picture')[0]?.url ?? null,
-    department: details?.department ?? null,
     year: details?.year ?? null,
     email: emailsByName?.get(normaliseName(name)) ?? null,
   };

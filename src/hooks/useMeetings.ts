@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
-import type { AsyncResult, Meeting, MeetingAttendee, MeetingEdit, MeetingInput, RosterMember } from '@/lib/types';
+import type { AsyncResult, Meeting, MeetingAttendee, MeetingEdit, MeetingInput, MeetingRsvp, RosterMember } from '@/lib/types';
 import { createApiStore } from '@/lib/apiStore';
 import { eventStart, isTba, isUpcoming } from '@/lib/eventDates';
 import { apiFetch } from '@/lib/api';
@@ -10,7 +10,8 @@ import { apiFetch } from '@/lib/api';
 // Team Dashboard > Meetings from GET /api/meetings, shared across views.
 // A meeting is upcoming until it's over (or while its date is TBA), then it
 // moves to the minutes list. Organisers add, edit and delete them in Notion;
-// anyone on the committee can say they're going (Notion `Attendees`).
+// anyone on the committee can say they're going or not (Notion `Attendees` /
+// `Not Going`).
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface MeetingDto {
@@ -23,6 +24,7 @@ interface MeetingDto {
   type: string | null;
   createdBy: string | null;
   attendees: MeetingAttendee[];
+  notGoing?: MeetingAttendee[];
   url: string;
 }
 
@@ -53,6 +55,7 @@ function toMeeting(dto: MeetingDto): Meeting {
     type: dto.type ?? undefined,
     createdBy: dto.createdBy ?? undefined,
     attendees: dto.attendees ?? [],
+    notGoing: dto.notGoing ?? [],
     notionUrl: dto.url,
   };
 }
@@ -71,11 +74,11 @@ const store = createApiStore<MeetingsResponse, MeetingsState>(
 
 const normaliseName = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
 
-/** Whether a committee member is among a meeting's attendees: by Notion id, else by name. */
-export function isAttending(member: RosterMember, attendees: MeetingAttendee[]): boolean {
-  if (member.notionUserId && attendees.some((a) => a.id === member.notionUserId)) return true;
+/** Whether a committee member is in a list of people: by Notion id, else by name. */
+export function isListed(member: RosterMember, list: MeetingAttendee[]): boolean {
+  if (member.notionUserId && list.some((a) => a.id === member.notionUserId)) return true;
   const name = normaliseName(member.name);
-  return attendees.some((a) => normaliseName(a.name) === name);
+  return list.some((a) => normaliseName(a.name) === name);
 }
 
 function startMs(m: Meeting): number | null {
@@ -99,8 +102,8 @@ export interface MeetingsResult extends AsyncResult<Meeting[]> {
   roster: RosterMember[];
   /** The signed-in member's Notion user id; null when they have no Notion account. */
   me: string | null;
-  /** Add or remove the signed-in member from a meeting's attendees. */
-  setGoing: (id: string, going: boolean) => Promise<Meeting>;
+  /** Set the signed-in member's reply to a meeting (null clears it). */
+  setRsvp: (id: string, rsvp: MeetingRsvp) => Promise<Meeting>;
 }
 
 export function useMeetings(): MeetingsResult {
@@ -158,10 +161,10 @@ export function useMeetings(): MeetingsResult {
     store.update((v) => ({ ...v, meetings: v.meetings.filter((m) => m.id !== id) }));
   }, []);
 
-  const setGoing = useCallback(async (id: string, going: boolean): Promise<Meeting> => {
+  const setRsvp = useCallback(async (id: string, rsvp: MeetingRsvp): Promise<Meeting> => {
     const { meeting: dto } = await apiFetch<{ meeting: MeetingDto }>(`meetings?id=${encodeURIComponent(id)}`, {
       method: 'PATCH',
-      body: JSON.stringify({ going }),
+      body: JSON.stringify({ rsvp }),
     });
     const meeting = toMeeting(dto);
     store.update((v) => ({ ...v, meetings: v.meetings.map((m) => (m.id === id ? meeting : m)) }));
@@ -181,6 +184,6 @@ export function useMeetings(): MeetingsResult {
     deleteMeeting,
     roster: value.roster,
     me: value.me,
-    setGoing,
+    setRsvp,
   };
 }

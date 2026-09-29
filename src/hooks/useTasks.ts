@@ -155,7 +155,7 @@ async function deleteTask(id: string): Promise<void> {
 export const GENERAL_GROUP = 'General';
 
 export interface PersonGroup {
-  /** Notion user id, group name, or 'unassigned'. */
+  /** Notion user id, or 'group:Everyone' / 'group:Unassigned'. */
   key: string;
   name: string;
   /** The signed-in member's own group. */
@@ -165,7 +165,7 @@ export interface PersonGroup {
 
 /**
  * One group per PIC person (a task with several PICs appears under each),
- * then Notion groups such as "Marketing Department", then "Unassigned".
+ * then "Everyone" (Notion's Everyone group), then "Unassigned".
  * The signed-in member's group comes first; the rest are alphabetical.
  */
 function groupByPerson(tasks: Task[], myUserId: string | null): PersonGroup[] {

@@ -57,7 +57,7 @@ Restructured 2026-09-29 after the President's review (`scripts/restructure-meeti
   - Edit: title, date/time (or TBA), venue, type (`PATCH /api/meetings?id=`). Delete moves the page to Notion's trash (`DELETE`).
   - Notes (upcoming) and minutes (past) are the page body, edited with the rich-text editor.
   - Everyone else can read them. Nothing is recurring; the weekly meeting is added like any other.
-- **Attendance** is Notion `Attendees` (people). Each meeting shows who's going and who isn't (the ExCo minus the attendees, matched by Notion user id from the member's email, else by name). Any committee member can add or remove **themselves** on an upcoming meeting (`PATCH /api/meetings?id=` with `{ going }`); past meetings show who attended, read-only. Events have no attendance.
+- **Attendance**: Notion `Attendees` (people) is who's going; `Not Going` (people) is who said they can't come. Each upcoming meeting shows Going / Not going / No reply (the ExCo minus both lists, matched by Notion user id from the member's email, else by name). Any committee member sets **their own** reply (`PATCH /api/meetings?id=` with `{ rsvp: 'going' | 'not-going' | null }`); pressing the current answer again clears it. Past meetings show Attended / Didn't attend, read-only. Events have no attendance. Until the `Not Going` property exists in Notion, "Not going" replies are refused with a message saying so.
 
 **Page bodies** (event Overview, meeting notes/minutes) are edited in a rich-text editor (TipTap, `src/components/RichTextEditor.tsx`), never raw Markdown. Markdown is only the wire format:
 - `GET /api/event-content?id=` returns `editorMarkdown` (from `toEditorMarkdown` in `api/_lib/notionMarkdown.ts`), the stored `source`, and `canEdit`. `PUT` saves with `pages.updateMarkdown` `replace_content`, sending `source` back as `base`; if the page changed meanwhile the server answers 409 instead of overwriting.
@@ -67,7 +67,7 @@ Restructured 2026-09-29 after the President's review (`scripts/restructure-meeti
 
 ## Tasks and the Weekly tab
 - Weekly to-dos are rows in Tasks. `PIC` (people) is the owner of each to-do. `Events` (relation) links it to an event. `Week` (date) is the Monday of the week it was planned for.
-- The Weekly tab shows **everyone's** to-dos, grouped by PIC person (a task with several PICs appears under each; the signed-in member first), then PIC groups such as "Marketing Department", then "Unassigned".
+- The Weekly tab shows **everyone's** to-dos, grouped by PIC person (a task with several PICs appears under each; the signed-in member first), then "Everyone" (tasks whose only PIC is Notion's Everyone group), then "Unassigned". **To-dos are individual: there is no grouping by department.** A department group as PIC is ignored (the task shows as Unassigned until a person is named).
   - **This week**: `Week` is this week, plus anything still open from an earlier week (marked "From an earlier week") or with no `Week`.
   - **Last week**: `Week` is last week, Done or not.
   - Weeks are Asia/Kuala_Lumpur, starting Monday.
@@ -79,7 +79,7 @@ Restructured 2026-09-29 after the President's review (`scripts/restructure-meeti
 
 ## Ownership rules (enforced server-side on every write)
 - A user can **tick, edit or delete** a task if any PIC person's email matches their login email or their `committee_members.notion_email`, compared case-insensitively. `notion_email` is a nullable column; one member's Notion email is a personal Gmail.
-- Tasks assigned only to a group (e.g. "Everyone", a department) or with no PIC can be **ticked/unticked** by any committee member. Editing or deleting them is admin-only.
+- Tasks assigned only to a group (e.g. "Everyone") or with no PIC can be **ticked/unticked** by any committee member. Editing or deleting them is admin-only.
 - `committee_members.is_admin = true` can do anything. `is_admin` is a boolean column, default false. `role` is only a job title and grants no permissions.
 
 ## Team
@@ -89,11 +89,11 @@ Restructured 2026-09-29 after the President's review (`scripts/restructure-meeti
   - `Picture` → avatar
 
   Picture URLs expire after about an hour, so always serve them from a fresh query. The 60s cache is fine.
-- **Department and year come from a server-side file, `/api/_lib/memberDetails.js`**, keyed by the member's Notion page id, not their name.
-  - Generate it pre-filled with every current ExCo page id, the member's name as a comment, and department/year left blank for the owner to fill in.
+- **Year comes from a server-side file, `/api/_lib/memberDetails.ts`**, keyed by the member's Notion page id, not their name. Members are individuals: there is no department field or grouping (removed 2026-09-29).
+  - It's pre-filled with every current ExCo page id, the member's name as a comment, and year left blank for the owner to fill in.
   - Put a comment at the top explaining what the file is and how to update it.
 - **Email comes from Supabase `committee_members`**, matched on name. List any members that couldn't be matched so they can be fixed by hand.
-- Members missing from `memberDetails.js` still appear, just without department/year. Keep the Department/Year filters and stats.
+- Members missing from `memberDetails.js` still appear, just without a year.
 - Never expose `Shirt Size`.
 
 ## Documents
@@ -143,7 +143,7 @@ Every ringgit in or out is one row. Exact property names and options are in `NOT
 9. Supabase: add the nullable `notion_email` column to `committee_members`. The SQL comes from the agent in step 2; the owner runs it.
 10. ~~Final sweep: remove leftover mock arrays and artificial delays, and list anything still hard-coded.~~ **Done.** Still hard-coded on purpose:
     - Home announcements (`HomeView.tsx`, no Notion source).
-    - Member department/year (`api/_lib/memberDetails.ts`, filled in by hand).
+    - Member year (`api/_lib/memberDetails.ts`, filled in by hand).
     - UI option lists: task statuses and event status labels.
     - Switched off in `src/lib/features.ts`: event agenda, RSVP, description, event editing (add/delete/dates/status), and the EPF button.
 11. Deploy: add all env vars to Vercel, redeploy, then test with two different committee accounts (own vs other people's to-dos, finance entries).

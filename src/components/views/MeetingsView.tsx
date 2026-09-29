@@ -22,9 +22,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { AlertCircle, CalendarDays, CalendarPlus, Check, Clock, Loader2, MapPin, Pencil, Plus, Trash2, Users } from 'lucide-react';
+import { AlertCircle, CalendarDays, CalendarPlus, Check, Clock, Loader2, MapPin, Pencil, Plus, Trash2, Users, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { isAttending, useMeetings } from '@/hooks/useMeetings';
+import { isListed, useMeetings } from '@/hooks/useMeetings';
 import { formatEventDate, formatEventTimeRange, isTba, isUpcoming } from '@/lib/eventDates';
 import { buildTimeline, whenFromEvent, type WhenValue } from '@/lib/eventWhen';
 import { PageBody } from '@/components/PageBody';
@@ -33,7 +33,7 @@ import { TbaTag } from '@/components/TbaTag';
 import { DetailFacts } from '@/components/DetailFacts';
 import { EventWhenFields } from '@/components/EventWhenFields';
 import { MonthCalendar, ViewModeToggle } from '@/components/MonthCalendar';
-import type { Meeting, MeetingAttendee } from '@/lib/types';
+import type { Meeting, MeetingAttendee, MeetingRsvp, RosterMember } from '@/lib/types';
 
 const MEETING_CHIP_CLASSES = 'border-sky-500/30 bg-sky-500/10 text-sky-700 hover:bg-sky-500/20 dark:text-sky-400';
 
@@ -389,21 +389,37 @@ function MeetingDetail({
   );
 }
 
-/** "3 going", with a tick when the signed-in member is one of them. */
+/** "3 going", plus the signed-in member's own reply. */
 function GoingCount({ meeting }: { meeting: Meeting }) {
   const { me } = useMeetings();
   const count = meeting.attendees.length;
-  const mine = !!me && meeting.attendees.some((a) => a.id === me);
-  if (!count) return null;
+  const rsvp = myRsvp(meeting, me);
+  if (!count && !rsvp) return null;
   return (
-    <span className={cn('flex items-center gap-1.5 text-xs', mine ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
-      {mine ? <Check className="h-3 w-3 shrink-0" /> : <Users className="h-3 w-3 shrink-0" />}
-      {count} going{mine && ' · including you'}
+    <span
+      className={cn(
+        'flex items-center gap-1.5 text-xs',
+        rsvp === 'going' ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'
+      )}
+    >
+      {rsvp === 'going' ? <Check className="h-3 w-3 shrink-0" /> : <Users className="h-3 w-3 shrink-0" />}
+      {count} going
+      {rsvp === 'going' && ' · including you'}
+      {rsvp === 'not-going' && ' · you\'re not going'}
     </span>
   );
 }
 
-function PersonChip({ name, muted }: { name: string; muted?: boolean }) {
+function myRsvp(meeting: Meeting, me: string | null): MeetingRsvp {
+  if (!me) return null;
+  if (meeting.attendees.some((a) => a.id === me)) return 'going';
+  if (meeting.notGoing.some((a) => a.id === me)) return 'not-going';
+  return null;
+}
+
+type ChipTone = 'going' | 'not-going' | 'none';
+
+function PersonChip({ name, tone }: { name: string; tone: ChipTone }) {
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -414,14 +430,18 @@ function PersonChip({ name, muted }: { name: string; muted?: boolean }) {
     <li
       className={cn(
         'flex items-center gap-1.5 border py-0.5 pl-0.5 pr-2 text-xs',
-        muted ? 'border-border text-muted-foreground' : 'border-emerald-500/40 bg-emerald-500/10 text-foreground'
+        tone === 'going' && 'border-emerald-500/40 bg-emerald-500/10 text-foreground',
+        tone === 'not-going' && 'border-rose-500/40 bg-rose-500/10 text-foreground',
+        tone === 'none' && 'border-border text-muted-foreground'
       )}
     >
       <span
         aria-hidden
         className={cn(
           'flex h-5 w-5 items-center justify-center text-[9px] font-semibold',
-          muted ? 'bg-muted text-muted-foreground' : 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+          tone === 'going' && 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300',
+          tone === 'not-going' && 'bg-rose-500/20 text-rose-700 dark:text-rose-300',
+          tone === 'none' && 'bg-muted text-muted-foreground'
         )}
       >
         {initials}
@@ -432,40 +452,114 @@ function PersonChip({ name, muted }: { name: string; muted?: boolean }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MeetingAttendance — who's going (Notion `Attendees`) and who isn't; anyone
-// on the committee can add or remove themselves while the meeting is upcoming
+// MeetingAttendance — who's going (Notion `Attendees`), who isn't (`Not Going`)
+// and who hasn't replied; anyone on the committee sets their own reply while
+// the meeting is upcoming
 // ─────────────────────────────────────────────────────────────────────────────
 
+function PeopleColumn({
+  label,
+  labelClassName,
+  people,
+  tone,
+  me,
+  empty,
+}: {
+  label: string;
+  labelClassName: string;
+  people: { key: string; name: string; id?: string | null }[];
+  tone: ChipTone;
+  me: string | null;
+  empty: string;
+}) {
+  return (
+    <div>
+      <p className={cn('mb-1.5 text-[11px] font-medium', labelClassName)}>
+        {label} ({people.length})
+      </p>
+      {people.length ? (
+        <ul className="flex flex-wrap gap-1.5">
+          {people.map((p) => (
+            <PersonChip key={p.key} name={me && p.id === me ? `${p.name} (you)` : p.name} tone={tone} />
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-muted-foreground">{empty}</p>
+      )}
+    </div>
+  );
+}
+
+const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
+
+/** Alphabetical, with the signed-in member first. */
+function meFirst(list: MeetingAttendee[], me: string | null) {
+  return [...list]
+    .sort((a, b) => (a.id === me ? -1 : b.id === me ? 1 : byName(a, b)))
+    .map((a) => ({ key: a.id, name: a.name, id: a.id }));
+}
+
+function fromRoster(list: RosterMember[]) {
+  return [...list].sort(byName).map((r) => ({ key: r.notionUserId ?? r.name, name: r.name, id: r.notionUserId }));
+}
+
 function MeetingAttendance({ meeting }: { meeting: Meeting }) {
-  const { roster, me, setGoing } = useMeetings();
+  const { roster, me, setRsvp } = useMeetings();
   const { toast } = useToast();
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState<MeetingRsvp | 'clear' | false>(false);
   const upcoming = isUpcomingMeeting(meeting);
+  const mine = myRsvp(meeting, me);
 
-  const going: MeetingAttendee[] = useMemo(
-    () => [...meeting.attendees].sort((a, b) => (a.id === me ? -1 : b.id === me ? 1 : a.name.localeCompare(b.name))),
-    [meeting.attendees, me]
+  const going = useMemo(() => meFirst(meeting.attendees, me), [meeting.attendees, me]);
+  const notGoing = useMemo(() => meFirst(meeting.notGoing, me), [meeting.notGoing, me]);
+  const noReply = useMemo(
+    () => fromRoster(roster.filter((r) => !isListed(r, meeting.attendees) && !isListed(r, meeting.notGoing))),
+    [roster, meeting.attendees, meeting.notGoing]
   );
-  const notGoing = useMemo(
-    () => roster.filter((r) => !isAttending(r, meeting.attendees)).sort((a, b) => a.name.localeCompare(b.name)),
-    [roster, meeting.attendees]
-  );
-  const mine = !!me && meeting.attendees.some((a) => a.id === me);
 
-  const toggle = async () => {
-    setSaving(true);
+  const reply = async (choice: Exclude<MeetingRsvp, null>) => {
+    // Pressing your current answer again clears it
+    const next: MeetingRsvp = mine === choice ? null : choice;
+    setSaving(next ?? 'clear');
     try {
-      await setGoing(meeting.id, !mine);
-      toast({ title: mine ? "You're no longer going" : "You're going", description: meeting.title });
+      await setRsvp(meeting.id, next);
+      toast({
+        title: next === 'going' ? "You're going" : next === 'not-going' ? "You're not going" : 'Reply cleared',
+        description: meeting.title,
+      });
     } catch (err) {
-      toast({ title: "Couldn't update your RSVP", description: (err as Error).message, variant: 'destructive' });
+      toast({ title: "Couldn't save your reply", description: (err as Error).message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
   };
 
-  const goingLabel = upcoming ? 'Going' : 'Attended';
-  const notGoingLabel = upcoming ? 'Not going' : "Didn't attend";
+  const choiceButton = (choice: Exclude<MeetingRsvp, null>) => {
+    const active = mine === choice;
+    const Icon = choice === 'going' ? Check : X;
+    return (
+      <button
+        type="button"
+        onClick={() => void reply(choice)}
+        disabled={saving !== false}
+        aria-pressed={active}
+        title={active ? 'Press again to clear your reply' : undefined}
+        className={cn(
+          'flex items-center gap-1.5 border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-60',
+          choice === 'going'
+            ? active
+              ? 'border-emerald-500 bg-emerald-500 text-white'
+              : 'border-border text-foreground hover:border-emerald-500 hover:text-emerald-600'
+            : active
+              ? 'border-rose-500 bg-rose-500 text-white'
+              : 'border-border text-foreground hover:border-rose-500 hover:text-rose-600'
+        )}
+      >
+        {saving === choice || (active && saving === 'clear') ? <Loader2 className="h-3 w-3 animate-spin" /> : <Icon className="h-3 w-3" />}
+        {choice === 'going' ? 'Going' : 'Not going'}
+      </button>
+    );
+  };
 
   return (
     <section aria-label="Attendance" className="border border-border p-4">
@@ -476,58 +570,42 @@ function MeetingAttendance({ meeting }: { meeting: Meeting }) {
         </h4>
         {upcoming &&
           (me ? (
-            <button
-              type="button"
-              onClick={() => void toggle()}
-              disabled={saving}
-              aria-pressed={mine}
-              className={cn(
-                'flex items-center gap-1.5 border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-60',
-                mine
-                  ? 'border-emerald-500 bg-emerald-500 text-white hover:border-destructive hover:bg-destructive'
-                  : 'border-primary text-primary hover:bg-primary hover:text-primary-foreground'
-              )}
-            >
-              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : mine ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
-              {mine ? "You're going · Can't make it?" : "I'm going"}
-            </button>
+            <div className="flex items-center gap-2" role="group" aria-label="Your reply">
+              <span className="text-[11px] text-muted-foreground">Are you going?</span>
+              {choiceButton('going')}
+              {choiceButton('not-going')}
+            </div>
           ) : (
-            <span className="text-[11px] text-muted-foreground">No Notion account is linked to your login, so you can't RSVP.</span>
+            <span className="text-[11px] text-muted-foreground">No Notion account is linked to your login, so you can't reply.</span>
           ))}
       </div>
 
-      <div className="mt-3 grid gap-4 sm:grid-cols-2">
-        <div>
-          <p className="mb-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-            {goingLabel} ({going.length})
-          </p>
-          {going.length ? (
-            <ul className="flex flex-wrap gap-1.5">
-              {going.map((a) => (
-                <PersonChip key={a.id} name={a.id === me ? `${a.name} (you)` : a.name} />
-              ))}
-            </ul>
-          ) : (
-            <p className="text-xs text-muted-foreground">{upcoming ? 'Nobody yet.' : 'Nobody was recorded.'}</p>
-          )}
+      {upcoming ? (
+        <div className="mt-3 grid gap-4 sm:grid-cols-3">
+          <PeopleColumn label="Going" labelClassName="text-emerald-700 dark:text-emerald-400" people={going} tone="going" me={me} empty="Nobody yet." />
+          <PeopleColumn label="Not going" labelClassName="text-rose-700 dark:text-rose-400" people={notGoing} tone="not-going" me={me} empty="Nobody yet." />
+          <PeopleColumn
+            label="No reply"
+            labelClassName="text-muted-foreground"
+            people={noReply}
+            tone="none"
+            me={me}
+            empty={roster.length ? 'Everyone has replied.' : "The committee list couldn't be loaded."}
+          />
         </div>
-        <div>
-          <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">
-            {notGoingLabel} ({notGoing.length})
-          </p>
-          {notGoing.length ? (
-            <ul className="flex flex-wrap gap-1.5">
-              {notGoing.map((r) => (
-                <PersonChip key={r.notionUserId ?? r.name} name={r.name} muted />
-              ))}
-            </ul>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              {roster.length ? `Everyone on the committee${upcoming ? ' is going' : ' attended'}.` : "The committee list couldn't be loaded."}
-            </p>
-          )}
+      ) : (
+        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <PeopleColumn label="Attended" labelClassName="text-emerald-700 dark:text-emerald-400" people={going} tone="going" me={me} empty="Nobody was recorded." />
+          <PeopleColumn
+            label="Didn't attend"
+            labelClassName="text-muted-foreground"
+            people={fromRoster(roster.filter((r) => !isListed(r, meeting.attendees)))}
+            tone="none"
+            me={me}
+            empty={roster.length ? 'Everyone on the committee attended.' : "The committee list couldn't be loaded."}
+          />
         </div>
-      </div>
+      )}
     </section>
   );
 }

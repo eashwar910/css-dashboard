@@ -23,12 +23,9 @@ export interface TaskDto {
   lastEditedTime: string;
   /** A PIC person's email matches the signed-in member's login or notion_email. */
   mine: boolean;
-  /**
-   * PIC has no individual person: only groups (e.g. "Everyone") or nobody.
-   * Shown to every member under "Shared" in the weekly view.
-   */
+  /** PIC has no individual person: only the "Everyone" group, or nobody. */
   shared: boolean;
-  /** For shared tasks: the PIC group name(s), or "Unassigned". null otherwise. */
+  /** For shared tasks: "Everyone" or "Unassigned". null otherwise. */
   sharedWith: string | null;
   /** `Week`: Monday (YYYY-MM-DD, Kuala Lumpur) of the week the to-do was planned for; null if unset. */
   week: string | null;
@@ -57,14 +54,16 @@ const STATUS_MAP: Record<string, TaskStatusDto> = {
 // Malaysia is UTC+8 with no daylight saving, so a fixed offset is exact.
 
 /**
- * Groups and bots aren't individual owners; partial users (id only) are a
- * person we can't see, so they still count. Same rule as ownership.ts.
+ * Tasks belong to individuals. Groups and bots aren't owners; partial users
+ * (id only) are a person we can't see, so they still count. Same rule as
+ * ownership.ts. With no individual PIC, only Notion's "Everyone" group is
+ * shown; any other group (e.g. a department) is ignored, so the task reads
+ * as "Unassigned" until someone is named as PIC.
  */
 export function sharedWith(page: PageObjectResponse): string | null {
   const pic = people(page, 'PIC');
   if (pic.some((p) => p.kind === 'person' || p.kind === 'unknown')) return null;
-  const groups = pic.filter((p) => p.kind === 'group').map((p) => p.name ?? 'Group');
-  return groups.length ? groups.join(', ') : 'Unassigned';
+  return pic.some((p) => p.kind === 'group' && p.name === 'Everyone') ? 'Everyone' : 'Unassigned';
 }
 
 const KL_OFFSET_MS = 8 * 60 * 60 * 1000;

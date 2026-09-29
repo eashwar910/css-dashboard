@@ -1,8 +1,8 @@
 // Team Dashboard > Meetings → the Meetings tab. A meeting's minutes are its
 // page body. Upcoming vs past is worked out from `Date` on the client; there's
 // no status property to go stale. Organisers (roles.ts) add, edit and delete. Restructured by
-// scripts/restructure-meetings-and-weeks.mjs. `Attendees` (people) is who's going: any
-// committee member can add or remove themselves.
+// scripts/restructure-meetings-and-weeks.mjs. `Attendees` (people) is who's going and
+// `Not Going` (people) who said they can't come: any committee member sets their own reply.
 
 import type { PageObjectResponse } from '@notionhq/client';
 import type { CommitteeMember } from './auth.js';
@@ -28,6 +28,8 @@ export interface MeetingDto {
   createdBy: string | null;
   /** `Attendees`: who's going (upcoming) or went (past). */
   attendees: AttendeeDto[];
+  /** `Not Going`: who said they can't come. */
+  notGoing: AttendeeDto[];
   url: string;
 }
 
@@ -35,6 +37,14 @@ export interface AttendeeDto {
   /** Notion user id. */
   id: string;
   name: string;
+}
+
+const NOT_GOING = 'Not Going';
+
+function individuals(page: PageObjectResponse, property: string): AttendeeDto[] {
+  return people(page, property)
+    .filter((p) => p.kind === 'person' || p.kind === 'unknown')
+    .map((p) => ({ id: p.id, name: p.name ?? 'Former member' }));
 }
 
 export function toMeeting(page: PageObjectResponse): MeetingDto {
@@ -45,9 +55,8 @@ export function toMeeting(page: PageObjectResponse): MeetingDto {
     location: select(page, 'Venue'),
     type: select(page, 'Type'),
     createdBy: people(page, 'Created By')[0]?.name ?? null,
-    attendees: people(page, 'Attendees')
-      .filter((p) => p.kind === 'person' || p.kind === 'unknown')
-      .map((p) => ({ id: p.id, name: p.name ?? 'Former member' })),
+    attendees: individuals(page, 'Attendees'),
+    notGoing: individuals(page, NOT_GOING),
     url: page.url,
   };
 }
@@ -77,20 +86,35 @@ export async function loadRoster(): Promise<RosterMemberDto[]> {
 
 // ── Attendance (any committee member, for themselves) ────────────────────────
 
-/** Add the signed-in member to `Attendees` (going) or take them off it. */
-export async function setAttendance(member: CommitteeMember, id: string, going: unknown): Promise<MeetingDto> {
-  if (typeof going !== 'boolean') throw new HttpError(400, 'going must be true or false');
+export type Rsvp = 'going' | 'not-going' | null;
+
+/**
+ * Set the signed-in member's reply: 'going' puts them in `Attendees`,
+ * 'not-going' in `Not Going`, null takes them out of both.
+ */
+export async function setAttendance(member: CommitteeMember, id: string, rsvp: unknown): Promise<MeetingDto> {
+  if (rsvp !== 'going' && rsvp !== 'not-going' && rsvp !== null) {
+    throw new HttpError(400, "rsvp must be 'going', 'not-going' or null");
+  }
   const userId = await notionUserIdFor(member);
-  if (!userId) throw new HttpError(409, "Your Notion account couldn't be found, so you can't be added as an attendee");
+  if (!userId) throw new HttpError(409, "Your Notion account couldn't be found, so you can't reply to meetings");
 
   // Read fresh so someone else's change a moment ago isn't overwritten
   const current = await retrievePageIn('meetings', id);
   if (!current) throw new HttpError(404, 'Meeting not found');
-  const ids = people(current, 'Attendees').map((p) => p.id);
-  if (going === ids.includes(userId)) return toMeeting(current);
-  const next = going ? [...ids, userId] : ids.filter((x) => x !== userId);
+  const hasNotGoing = current.properties[NOT_GOING]?.type === 'people';
+  if (rsvp === 'not-going' && !hasNotGoing) {
+    throw new HttpError(409, `The Meetings database in Notion needs a "${NOT_GOING}" people property first`);
+  }
 
-  const page = await notion().pages.update({ page_id: id, properties: { Attendees: write.people(next) } });
+  const withMe = (property: string, include: boolean) => {
+    const ids = people(current, property).map((p) => p.id).filter((x) => x !== userId);
+    return write.people(include ? [...ids, userId] : ids);
+  };
+  const properties: Record<string, ReturnType<typeof write.people>> = { Attendees: withMe('Attendees', rsvp === 'going') };
+  if (hasNotGoing) properties[NOT_GOING] = withMe(NOT_GOING, rsvp === 'not-going');
+
+  const page = await notion().pages.update({ page_id: id, properties });
   cacheInvalidate('meetings:');
 
   if (!('properties' in page)) throw new HttpError(502, 'Notion did not return the updated meeting');

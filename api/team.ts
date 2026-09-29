@@ -1,4 +1,4 @@
-// GET /api/team: ExCo members with department/year and committee email.
+// GET /api/team: ExCo members with year and committee email.
 
 import { requireCommittee } from './_lib/auth.js';
 import { sendJson, withHandler } from './_lib/http.js';

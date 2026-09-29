@@ -37,7 +37,7 @@ export function canModifyTask(
     return { allowed: true, reason: 'pic', message: 'You are a PIC on this task' };
   }
 
-  // Groups ("Everyone", departments) and bots aren't individual owners.
+  // Groups (e.g. "Everyone") and bots aren't individual owners.
   // Partial users ('unknown') are a person we can't see the email of, so they still count.
   const hasIndividual = pic.some((p) => p.kind === 'person' || p.kind === 'unknown');
   if (!hasIndividual) {

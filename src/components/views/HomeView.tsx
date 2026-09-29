@@ -118,8 +118,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
     const matchedMembers = teamMembers.filter(
       (m) =>
         m.name.toLowerCase().includes(q) ||
-        m.role.toLowerCase().includes(q) ||
-        (m.department?.toLowerCase().includes(q) ?? false)
+        m.role.toLowerCase().includes(q)
     );
 
     return {
@@ -266,7 +265,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
                           {m.name}
                         </p>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
-                          {[m.role, m.department].filter(Boolean).join(' · ')}
+                          {m.role}
                         </p>
                       </li>
                     ))}

@@ -2,7 +2,7 @@
 //   GET                   every meeting → { meetings, canManage, types, roster, me } (me = your Notion user id)
 //   POST                  schedule { title, date, time, notes?, venue?, type? } → { meeting }
 //   PATCH ?id=<page id>   edit { title?, start?, end?, venue?, type? } (start null = TBA) → { meeting }
-//   PATCH ?id=<page id>   { going: boolean } adds/removes you as an attendee → { meeting }
+//   PATCH ?id=<page id>   { rsvp: 'going' | 'not-going' | null } sets your own reply → { meeting }
 //   DELETE ?id=<page id>  move to Notion's trash → { ok: true }
 // Attendance is for any committee member; other writes are for the President, Vice President, Secretary, Head of Tech and admins.
 
@@ -25,8 +25,8 @@ export default withHandler(
       case 'PATCH': {
         const body = jsonBody(req);
         const meeting =
-          'going' in body
-            ? await setAttendance(member, pageIdParam(req), body.going)
+          'rsvp' in body
+            ? await setAttendance(member, pageIdParam(req), body.rsvp)
             : await updateMeeting(member, pageIdParam(req), body);
         sendJson(res, 200, { meeting });
         return;

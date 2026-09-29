@@ -28,9 +28,9 @@ export interface Task {
   eventIds: string[];
   /** The signed-in member is a PIC on this task. */
   mine: boolean;
-  /** PIC is only groups or empty: shown to everyone under "Shared". */
+  /** No individual PIC: only Notion's "Everyone" group, or nobody. */
   shared: boolean;
-  /** Group name(s) for shared tasks, or "Unassigned". */
+  /** "Everyone" or "Unassigned" for shared tasks. */
   sharedWith?: string;
   /** Notion `Week`: Monday (YYYY-MM-DD) of the week it was planned for. Undefined when unset. */
   week?: string;
@@ -138,6 +138,8 @@ export interface Meeting {
   createdBy?: string;
   /** Notion `Attendees`: who's going (upcoming) or went (past). */
   attendees: MeetingAttendee[];
+  /** Notion `Not Going`: who said they can't come. */
+  notGoing: MeetingAttendee[];
   notionUrl: string;
 }
 
@@ -147,7 +149,10 @@ export interface MeetingAttendee {
   name: string;
 }
 
-/** A committee member, for listing who isn't going to a meeting. */
+/** A member's reply to a meeting; null = no reply. */
+export type MeetingRsvp = 'going' | 'not-going' | null;
+
+/** A committee member, for listing who hasn't replied to a meeting. */
 export interface RosterMember {
   name: string;
   /** null when they have no matching Notion account; matched on name instead. */
@@ -180,8 +185,6 @@ export interface TeamMember {
   name: string;
   /** Position from Notion; empty string when not set. */
   role: string;
-  /** From api/_lib/memberDetails.ts; undefined until filled in. */
-  department?: string;
   /** Academic year label, e.g. "Year 2". From api/_lib/memberDetails.ts. */
   year?: string;
   /** From Supabase committee_members; undefined when unmatched. */
