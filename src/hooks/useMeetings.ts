@@ -25,6 +25,7 @@ interface MeetingDto {
   createdBy: string | null;
   attendees: MeetingAttendee[];
   notGoing?: MeetingAttendee[];
+  attended?: MeetingAttendee[];
   url: string;
 }
 
@@ -56,6 +57,7 @@ function toMeeting(dto: MeetingDto): Meeting {
     createdBy: dto.createdBy ?? undefined,
     attendees: dto.attendees ?? [],
     notGoing: dto.notGoing ?? [],
+    attended: dto.attended ?? [],
     notionUrl: dto.url,
   };
 }
@@ -104,6 +106,8 @@ export interface MeetingsResult extends AsyncResult<Meeting[]> {
   me: string | null;
   /** Set the signed-in member's reply to a meeting (null clears it). */
   setRsvp: (id: string, rsvp: MeetingRsvp) => Promise<Meeting>;
+  /** Record who actually came (Notion user ids). Organisers only. */
+  setAttended: (id: string, attended: string[]) => Promise<Meeting>;
 }
 
 export function useMeetings(): MeetingsResult {
@@ -171,6 +175,16 @@ export function useMeetings(): MeetingsResult {
     return meeting;
   }, []);
 
+  const setAttended = useCallback(async (id: string, attended: string[]): Promise<Meeting> => {
+    const { meeting: dto } = await apiFetch<{ meeting: MeetingDto }>(`meetings?id=${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ attended }),
+    });
+    const meeting = toMeeting(dto);
+    store.update((v) => ({ ...v, meetings: v.meetings.map((m) => (m.id === id ? meeting : m)) }));
+    return meeting;
+  }, []);
+
   return {
     data: value.meetings,
     isLoading,
@@ -185,5 +199,6 @@ export function useMeetings(): MeetingsResult {
     roster: value.roster,
     me: value.me,
     setRsvp,
+    setAttended,
   };
 }

@@ -417,7 +417,7 @@ function myRsvp(meeting: Meeting, me: string | null): MeetingRsvp {
   return null;
 }
 
-type ChipTone = 'going' | 'not-going' | 'none';
+type ChipTone = 'going' | 'not-going' | 'none' | 'no-show';
 
 function PersonChip({ name, tone }: { name: string; tone: ChipTone }) {
   const initials = name
@@ -432,7 +432,8 @@ function PersonChip({ name, tone }: { name: string; tone: ChipTone }) {
         'flex items-center gap-1.5 border py-0.5 pl-0.5 pr-2 text-xs',
         tone === 'going' && 'border-emerald-500/40 bg-emerald-500/10 text-foreground',
         tone === 'not-going' && 'border-rose-500/40 bg-rose-500/10 text-foreground',
-        tone === 'none' && 'border-border text-muted-foreground'
+        tone === 'none' && 'border-border text-muted-foreground',
+        tone === 'no-show' && 'border-amber-500/50 bg-amber-500/10 text-foreground'
       )}
     >
       <span
@@ -441,7 +442,8 @@ function PersonChip({ name, tone }: { name: string; tone: ChipTone }) {
           'flex h-5 w-5 items-center justify-center text-[9px] font-semibold',
           tone === 'going' && 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300',
           tone === 'not-going' && 'bg-rose-500/20 text-rose-700 dark:text-rose-300',
-          tone === 'none' && 'bg-muted text-muted-foreground'
+          tone === 'none' && 'bg-muted text-muted-foreground',
+          tone === 'no-show' && 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
         )}
       >
         {initials}
@@ -564,10 +566,12 @@ function MeetingAttendance({ meeting }: { meeting: Meeting }) {
   return (
     <section aria-label="Attendance" className="border border-border p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          <Users className="h-3.5 w-3.5" />
-          {upcoming ? "Who's going" : 'Who attended'}
-        </h4>
+        {upcoming && (
+          <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <Users className="h-3.5 w-3.5" />
+            Who&apos;s going
+          </h4>
+        )}
         {upcoming &&
           (me ? (
             <div className="flex items-center gap-2" role="group" aria-label="Your reply">
@@ -594,19 +598,187 @@ function MeetingAttendance({ meeting }: { meeting: Meeting }) {
           />
         </div>
       ) : (
+        <PastAttendance meeting={meeting} />
+      )}
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PastAttendance — who actually came (Notion `Attended`, recorded by organisers
+// with the pencil), next to what people replied beforehand, so opted-in
+// no-shows stand out
+// ─────────────────────────────────────────────────────────────────────────────
+
+function PastAttendance({ meeting }: { meeting: Meeting }) {
+  const { roster, me, canManage } = useMeetings();
+  const [editing, setEditing] = useState(false);
+  const recorded = meeting.attended.length > 0;
+
+  const attended = useMemo(() => meFirst(meeting.attended, me), [meeting.attended, me]);
+  const absent = useMemo(() => fromRoster(roster.filter((r) => !isListed(r, meeting.attended))), [roster, meeting.attended]);
+  const optedIn = useMemo(() => meFirst(meeting.attendees, me), [meeting.attendees, me]);
+  const optedOut = useMemo(() => meFirst(meeting.notGoing, me), [meeting.notGoing, me]);
+  const noReply = useMemo(
+    () => fromRoster(roster.filter((r) => !isListed(r, meeting.attendees) && !isListed(r, meeting.notGoing))),
+    [roster, meeting.attendees, meeting.notGoing]
+  );
+  // Said they'd come, then didn't: matched by Notion id, else by name
+  const noShows = useMemo(() => {
+    const came = (a: MeetingAttendee) =>
+      meeting.attended.some((x) => x.id === a.id || x.name.trim().toLowerCase() === a.name.trim().toLowerCase());
+    return meFirst(meeting.attendees.filter((a) => !came(a)), me);
+  }, [meeting.attendees, meeting.attended, me]);
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <Users className="h-3.5 w-3.5" />
+          Who attended
+        </h4>
+        {canManage && !editing && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            title="Record who attended"
+            aria-label="Record who attended"
+            className="flex items-center gap-1.5 border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+          >
+            <Pencil className="h-3 w-3" />
+            {recorded ? 'Edit' : 'Record attendance'}
+          </button>
+        )}
+      </div>
+
+      {editing ? (
+        <AttendanceEditor meeting={meeting} onDone={() => setEditing(false)} />
+      ) : recorded ? (
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
-          <PeopleColumn label="Attended" labelClassName="text-emerald-700 dark:text-emerald-400" people={going} tone="going" me={me} empty="Nobody was recorded." />
+          <PeopleColumn label="Attended" labelClassName="text-emerald-700 dark:text-emerald-400" people={attended} tone="going" me={me} empty="Nobody." />
           <PeopleColumn
             label="Didn't attend"
             labelClassName="text-muted-foreground"
-            people={fromRoster(roster.filter((r) => !isListed(r, meeting.attendees)))}
+            people={absent}
             tone="none"
             me={me}
             empty={roster.length ? 'Everyone on the committee attended.' : "The committee list couldn't be loaded."}
           />
         </div>
+      ) : (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Attendance hasn&apos;t been recorded yet.
+          {canManage && ' Press “Record attendance” to tick who came.'}
+        </p>
       )}
-    </section>
+
+      <div className="mt-5 border-t border-border pt-4">
+        <h5 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Replies before the meeting</h5>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <PeopleColumn label="Opted in" labelClassName="text-emerald-700 dark:text-emerald-400" people={optedIn} tone="going" me={me} empty="Nobody." />
+          <PeopleColumn label="Opted out" labelClassName="text-rose-700 dark:text-rose-400" people={optedOut} tone="not-going" me={me} empty="Nobody." />
+          <PeopleColumn
+            label="No reply"
+            labelClassName="text-muted-foreground"
+            people={noReply}
+            tone="none"
+            me={me}
+            empty={roster.length ? 'Everyone replied.' : "The committee list couldn't be loaded."}
+          />
+        </div>
+        {recorded && (
+          <div className="mt-4">
+            <PeopleColumn
+              label="Opted in but didn't show"
+              labelClassName="text-amber-700 dark:text-amber-400"
+              people={noShows}
+              tone="no-show"
+              me={me}
+              empty="Everyone who opted in came."
+            />
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** Tick who came. Starts from what's recorded, or from who opted in if nothing is yet. */
+function AttendanceEditor({ meeting, onDone }: { meeting: Meeting; onDone: () => void }) {
+  const { roster, setAttended } = useMeetings();
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+  const members = useMemo(() => [...roster].sort(byName), [roster]);
+  const [picked, setPicked] = useState<Set<string>>(() => {
+    const start = meeting.attended.length ? meeting.attended : meeting.attendees;
+    return new Set(members.filter((r) => r.notionUserId && isListed(r, start)).map((r) => r.notionUserId!));
+  });
+
+  const toggle = (id: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await setAttended(meeting.id, [...picked]);
+      toast({ title: 'Attendance saved', description: `${picked.size} attended · ${meeting.title}` });
+      onDone();
+    } catch (err) {
+      toast({ title: "Couldn't save attendance", description: (err as Error).message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 space-y-3">
+      <p className="text-[11px] text-muted-foreground">
+        Tick everyone who came.{!meeting.attended.length && meeting.attendees.length > 0 && ' Everyone who opted in is ticked to start with.'}
+      </p>
+      <ul className="flex flex-wrap gap-1.5">
+        {members.map((r) => {
+          const id = r.notionUserId;
+          const on = id !== null && picked.has(id);
+          return (
+            <li key={id ?? r.name}>
+              <button
+                type="button"
+                disabled={!id || saving}
+                onClick={() => id && toggle(id)}
+                aria-pressed={on}
+                title={id ? undefined : 'No Notion account is linked to this member, so they can’t be recorded'}
+                className={cn(
+                  'flex items-center gap-1.5 border px-2 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                  on
+                    ? 'border-emerald-500 bg-emerald-500/15 text-foreground'
+                    : 'border-border text-muted-foreground hover:border-emerald-500 hover:text-foreground'
+                )}
+              >
+                {on ? <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" /> : <span className="h-3 w-3" />}
+                {r.name}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" size="sm" style={{ borderRadius: 0 }} className="h-8 text-xs" disabled={saving} onClick={() => void save()}>
+          {saving && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+          {saving ? 'Saving…' : `Save (${picked.size} attended)`}
+        </Button>
+        <Button type="button" size="sm" variant="outline" style={{ borderRadius: 0 }} className="h-8 text-xs" disabled={saving} onClick={onDone}>
+          Cancel
+        </Button>
+        <button type="button" disabled={saving} onClick={() => setPicked(new Set())} className="ml-auto text-[11px] text-muted-foreground hover:text-foreground hover:underline">
+          Clear all
+        </button>
+      </div>
+    </div>
   );
 }
 

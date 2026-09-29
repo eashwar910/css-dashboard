@@ -3,12 +3,13 @@
 //   POST                  schedule { title, date, time, notes?, venue?, type? } → { meeting }
 //   PATCH ?id=<page id>   edit { title?, start?, end?, venue?, type? } (start null = TBA) → { meeting }
 //   PATCH ?id=<page id>   { rsvp: 'going' | 'not-going' | null } sets your own reply → { meeting }
+//   PATCH ?id=<page id>   { attended: [notion user id] } records who actually came (organisers) → { meeting }
 //   DELETE ?id=<page id>  move to Notion's trash → { ok: true }
 // Attendance is for any committee member; other writes are for the President, Vice President, Secretary, Head of Tech and admins.
 
 import { requireCommittee } from './_lib/auth.js';
 import { jsonBody, pageIdParam, sendJson, withHandler } from './_lib/http.js';
-import { createMeeting, deleteMeeting, loadMeetings, loadRoster, MEETING_TYPES, setAttendance, updateMeeting } from './_lib/meetings.js';
+import { createMeeting, deleteMeeting, loadMeetings, loadRoster, MEETING_TYPES, setAttendance, setAttended, updateMeeting } from './_lib/meetings.js';
 import { notionUserIdFor } from './_lib/users.js';
 import { isOrganiser } from './_lib/roles.js';
 
@@ -27,7 +28,9 @@ export default withHandler(
         const meeting =
           'rsvp' in body
             ? await setAttendance(member, pageIdParam(req), body.rsvp)
-            : await updateMeeting(member, pageIdParam(req), body);
+            : 'attended' in body
+              ? await setAttended(member, pageIdParam(req), body.attended)
+              : await updateMeeting(member, pageIdParam(req), body);
         sendJson(res, 200, { meeting });
         return;
       }

@@ -3,6 +3,7 @@
 // no status property to go stale. Organisers (roles.ts) add, edit and delete. Restructured by
 // scripts/restructure-meetings-and-weeks.mjs. `Attendees` (people) is who's going and
 // `Not Going` (people) who said they can't come: any committee member sets their own reply.
+// `Attended` (people, scripts/add-meeting-attended.mjs) is who actually came, recorded by organisers.
 
 import type { PageObjectResponse } from '@notionhq/client';
 import type { CommitteeMember } from './auth.js';
@@ -30,6 +31,8 @@ export interface MeetingDto {
   attendees: AttendeeDto[];
   /** `Not Going`: who said they can't come. */
   notGoing: AttendeeDto[];
+  /** `Attended`: who actually came, recorded by organisers after the meeting. Empty = not recorded yet. */
+  attended: AttendeeDto[];
   url: string;
 }
 
@@ -40,6 +43,7 @@ export interface AttendeeDto {
 }
 
 const NOT_GOING = 'Not Going';
+const ATTENDED = 'Attended';
 
 function individuals(page: PageObjectResponse, property: string): AttendeeDto[] {
   return people(page, property)
@@ -57,6 +61,7 @@ export function toMeeting(page: PageObjectResponse): MeetingDto {
     createdBy: people(page, 'Created By')[0]?.name ?? null,
     attendees: individuals(page, 'Attendees'),
     notGoing: individuals(page, NOT_GOING),
+    attended: individuals(page, ATTENDED),
     url: page.url,
   };
 }
@@ -115,6 +120,33 @@ export async function setAttendance(member: CommitteeMember, id: string, rsvp: u
   if (hasNotGoing) properties[NOT_GOING] = withMe(NOT_GOING, rsvp === 'not-going');
 
   const page = await notion().pages.update({ page_id: id, properties });
+  cacheInvalidate('meetings:');
+
+  if (!('properties' in page)) throw new HttpError(502, 'Notion did not return the updated meeting');
+  return toMeeting(page);
+}
+
+// ── Actual attendance (organisers only) ──────────────────────────────────────
+
+/**
+ * Replace who actually attended with these Notion user ids. Each must be a
+ * committee member with a Notion account (the roster), so typos can't land.
+ */
+export async function setAttended(member: CommitteeMember, id: string, value: unknown): Promise<MeetingDto> {
+  await requireOrganiser(member);
+  if (!Array.isArray(value) || value.length > 100 || value.some((v) => typeof v !== 'string')) {
+    throw new HttpError(400, 'attended must be a list of Notion user ids');
+  }
+  const known = new Set((await loadRoster()).map((r) => r.notionUserId).filter((x): x is string => !!x));
+  const ids = [...new Set(value as string[])];
+  if (ids.some((x) => !known.has(x))) throw new HttpError(400, 'Everyone marked as attended must be on the committee list with a Notion account');
+
+  const current = await retrievePageIn('meetings', id);
+  if (!current) throw new HttpError(404, 'Meeting not found');
+  if (current.properties[ATTENDED]?.type !== 'people') {
+    throw new HttpError(409, `The Meetings database in Notion needs an "${ATTENDED}" people property first`);
+  }
+  const page = await notion().pages.update({ page_id: id, properties: { [ATTENDED]: write.people(ids) } });
   cacheInvalidate('meetings:');
 
   if (!('properties' in page)) throw new HttpError(502, 'Notion did not return the updated meeting');

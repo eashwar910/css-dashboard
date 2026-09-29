@@ -142,6 +142,8 @@ export interface Meeting {
   attendees: MeetingAttendee[];
   /** Notion `Not Going`: who said they can't come. */
   notGoing: MeetingAttendee[];
+  /** Notion `Attended`: who actually came, recorded by organisers. Empty = not recorded yet. */
+  attended: MeetingAttendee[];
   notionUrl: string;
 }
 
