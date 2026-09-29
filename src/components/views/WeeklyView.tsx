@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Pencil, Plus, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTasks, type PersonGroup } from '@/hooks/useTasks';
+import { compareMembers } from '@/lib/memberOrder';
 import type { Task } from '@/lib/types';
 import { TaskEditDialog } from '@/components/TaskEditDialog';
 import { AssignTaskForm } from '@/components/AssignTaskForm';
@@ -92,41 +93,92 @@ function TaskRow({ task, onToggle, onEdit }: { task: Task; onToggle: (id: string
   );
 }
 
-function PersonGroups({
-  groups,
+function TaskList({
+  tasks,
   empty,
   onToggle,
   onEdit,
 }: {
-  groups: PersonGroup[];
+  tasks: Task[];
   empty: string;
   onToggle: (id: string) => void;
   onEdit: (task: Task) => void;
 }) {
-  if (groups.length === 0) return <p className="py-6 text-xs text-muted-foreground">{empty}</p>;
+  if (tasks.length === 0) return <p className="py-2.5 text-xs text-muted-foreground">{empty}</p>;
+  return (
+    <ul className="divide-y divide-border">
+      {tasks.map((task) => (
+        <TaskRow key={task.id} task={task} onToggle={onToggle} onEdit={onEdit} />
+      ))}
+    </ul>
+  );
+}
+
+/** One person's this-week and overdue to-dos, merged from both groupings. */
+interface PersonRow {
+  key: string;
+  name: string;
+  isMe: boolean;
+  thisWeek: Task[];
+  overdue: Task[];
+}
+
+function personRows(thisWeekGroups: PersonGroup[], lastWeekGroups: PersonGroup[]): PersonRow[] {
+  const rows = new Map<string, PersonRow>();
+  const order = [...thisWeekGroups, ...lastWeekGroups].sort((a, b) => compareMembers(a.name, b.name) || a.name.localeCompare(b.name));
+  for (const g of order) {
+    if (!rows.has(g.key)) rows.set(g.key, { key: g.key, name: g.name, isMe: g.isMe, thisWeek: [], overdue: [] });
+  }
+  for (const g of thisWeekGroups) rows.get(g.key)!.thisWeek = g.tasks;
+  for (const g of lastWeekGroups) rows.get(g.key)!.overdue = g.tasks;
+  return [...rows.values()];
+}
+
+const doneCount = (tasks: Task[]) => tasks.filter((t) => t.completed).length;
+
+function ColumnLabel({ title, tasks, className }: { title: string; tasks: Task[]; className?: string }) {
+  return (
+    <div className={cn('flex items-baseline justify-between border-b border-border/60 pb-1', className)}>
+      <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{title}</h4>
+      {tasks.length > 0 && (
+        <span className="text-xs text-muted-foreground">
+          {doneCount(tasks)} of {tasks.length} done
+        </span>
+      )}
+    </div>
+  );
+}
+
+function PersonBoxes({
+  rows,
+  onToggle,
+  onEdit,
+}: {
+  rows: PersonRow[];
+  onToggle: (id: string) => void;
+  onEdit: (task: Task) => void;
+}) {
+  if (rows.length === 0) return <p className="py-6 text-sm text-muted-foreground">No to-dos this week yet.</p>;
   return (
     <div className="space-y-5">
-      {groups.map((group) => {
-        const done = group.tasks.filter((t) => t.completed).length;
-        return (
-          <div key={group.key}>
-            <div className="flex items-baseline justify-between border-b border-border/60 pb-1">
-              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {group.name}
-                {group.isMe && <span className="ml-1.5 normal-case tracking-normal text-primary">(you)</span>}
-              </h3>
-              <span className="text-[11px] text-muted-foreground">
-                {done} of {group.tasks.length} done
-              </span>
+      {rows.map((row) => (
+        <section key={row.key} className="border border-border p-4 sm:p-5">
+          <h3 className="mb-3 font-serif text-xl font-semibold">
+            {row.name}
+            {row.isMe && <span className="ml-2 text-sm font-normal text-primary">(you)</span>}
+          </h3>
+          <div className="grid gap-6 lg:grid-cols-2 lg:gap-10">
+            <div>
+              <ColumnLabel title="This week" tasks={row.thisWeek} />
+              <TaskList tasks={row.thisWeek} empty="Nothing this week." onToggle={onToggle} onEdit={onEdit} />
             </div>
-            <ul className="divide-y divide-border">
-              {group.tasks.map((task) => (
-                <TaskRow key={task.id} task={task} onToggle={onToggle} onEdit={onEdit} />
-              ))}
-            </ul>
+            <div>
+              <ColumnLabel title="Overdue" tasks={row.overdue} />
+              <TaskList tasks={row.overdue} empty="Nothing overdue." onToggle={onToggle} onEdit={onEdit} />
+            </div>
           </div>
-        );
-      })}
+        </section>
+      ))}
     </div>
   );
 }
@@ -147,7 +199,7 @@ function GroupsSkeleton() {
   );
 }
 
-/** Everyone's weekly to-dos, grouped by person: this week and last week. */
+/** Everyone's weekly to-dos, one box per person: this week beside overdue (last week's). */
 export function WeeklyView() {
   const {
     thisWeek,
@@ -190,14 +242,12 @@ export function WeeklyView() {
     }
   };
 
-  const doneCount = (tasks: Task[]) => tasks.filter((t) => t.completed).length;
-
   return (
     <div className="space-y-10">
       <header className="border-b border-border pb-6">
         <h1 className="font-serif text-3xl font-semibold leading-tight sm:text-4xl">Weekly</h1>
         <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-          Everyone's to-dos for this week and last week, by person, saved to Notion.
+          Everyone's to-dos for this week and overdue ones from last week, by person, saved to Notion.
           {!isLoading && !notionLinked && (
             <span className="mt-1 block text-destructive">
               Your login email doesn't match a Notion account, so none of these are marked as yours. Ask an admin to set your Notion email.
@@ -212,61 +262,54 @@ export function WeeklyView() {
           <span>Couldn't load tasks — try refreshing.</span>
         </div>
       ) : (
-        <div className="grid gap-12 lg:grid-cols-2">
-          {/* ── This week ─────────────────────────────────────────────── */}
-          <section>
-            <div className="mb-4 flex items-baseline justify-between border-b border-border pb-2">
-              <h2 className="font-serif text-lg font-semibold">
-                This week <span className="ml-1 text-xs font-normal text-muted-foreground">{weekRange(weekStart)}</span>
+        <div>
+          {/* Column headings, lined up with the two columns inside each person's box */}
+          <div className="mb-5 grid gap-2 border-b border-border pb-3 lg:grid-cols-2 lg:gap-10 lg:px-5">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="font-serif text-2xl font-semibold">
+                This week <span className="ml-1 text-sm font-normal text-muted-foreground">{weekRange(weekStart)}</span>
               </h2>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-sm text-muted-foreground">
                 {isLoading ? 'Loading...' : `${doneCount(thisWeek)} of ${thisWeek.length} done`}
               </span>
             </div>
-
-            {isLoading ? (
-              <GroupsSkeleton />
-            ) : (
-              <PersonGroups groups={thisWeekGroups} empty="No to-dos this week yet." onToggle={handleToggleTask} onEdit={setEditingTask} />
-            )}
-
-            {/* Add a task for yourself (this week, no event) */}
-            {!isLoading && (
-              <form onSubmit={handleAddTask} className="mt-5 flex gap-2">
-                <Input
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  placeholder="Add a to-do for yourself this week…"
-                  disabled={addingTask}
-                  style={{ borderRadius: 0 }}
-                  className="h-8 text-xs"
-                />
-                <Button type="submit" size="sm" variant="outline" style={{ borderRadius: 0 }} className="h-8 text-xs" disabled={addingTask || !newTaskTitle.trim()}>
-                  <Plus className="mr-1 h-3 w-3" />
-                  {addingTask ? 'Adding…' : 'Add'}
-                </Button>
-              </form>
-            )}
-
-            <AssignTaskForm />
-          </section>
-
-          {/* ── Last week ─────────────────────────────────────────────── */}
-          <section>
-            <div className="mb-4 flex items-baseline justify-between border-b border-border pb-2">
-              <h2 className="font-serif text-lg font-semibold">
-                Last week <span className="ml-1 text-xs font-normal text-muted-foreground">{weekRange(lastWeekStart)}</span>
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="font-serif text-2xl font-semibold">
+                Overdue <span className="ml-1 text-sm font-normal text-muted-foreground">{weekRange(lastWeekStart)}</span>
               </h2>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-sm text-muted-foreground">
                 {isLoading ? 'Loading...' : `${doneCount(lastWeek)} of ${lastWeek.length} done`}
               </span>
             </div>
-            {isLoading ? (
-              <GroupsSkeleton />
-            ) : (
-              <PersonGroups groups={lastWeekGroups} empty="No to-dos were planned for last week." onToggle={handleToggleTask} onEdit={setEditingTask} />
-            )}
-          </section>
+          </div>
+
+          {isLoading ? (
+            <GroupsSkeleton />
+          ) : (
+            <PersonBoxes rows={personRows(thisWeekGroups, lastWeekGroups)} onToggle={handleToggleTask} onEdit={setEditingTask} />
+          )}
+
+          {/* Add a task for yourself (this week, no event) */}
+          {!isLoading && (
+            <form onSubmit={handleAddTask} className="mt-6 flex max-w-xl gap-2">
+              <Input
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                placeholder="Add a to-do for yourself this week…"
+                disabled={addingTask}
+                style={{ borderRadius: 0 }}
+                className="h-8 text-xs"
+              />
+              <Button type="submit" size="sm" variant="outline" style={{ borderRadius: 0 }} className="h-8 text-xs" disabled={addingTask || !newTaskTitle.trim()}>
+                <Plus className="mr-1 h-3 w-3" />
+                {addingTask ? 'Adding…' : 'Add'}
+              </Button>
+            </form>
+          )}
+
+          <div className="max-w-xl">
+            <AssignTaskForm />
+          </div>
         </div>
       )}
 

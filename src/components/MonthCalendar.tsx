@@ -63,20 +63,20 @@ export function MonthCalendar<T extends CalendarItem>({ items, isLoading, onSele
           <button
             onClick={() => setCurrentDate((d) => subMonths(d, 1))}
             aria-label="Previous month"
-            className="flex h-7 w-7 items-center justify-center border border-border text-muted-foreground transition-colors hover:text-foreground"
+            className="flex h-7 w-7 items-center justify-center border border-border text-muted-foreground transition-colors hover:text-foreground dark:border-foreground/30 dark:bg-muted dark:text-foreground dark:hover:border-primary dark:hover:text-primary"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={() => setCurrentDate(startOfMonth(new Date()))}
-            className="border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            className="border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground dark:border-foreground/30 dark:bg-muted dark:text-foreground dark:hover:border-primary dark:hover:text-primary"
           >
             Today
           </button>
           <button
             onClick={() => setCurrentDate((d) => addMonths(d, 1))}
             aria-label="Next month"
-            className="flex h-7 w-7 items-center justify-center border border-border text-muted-foreground transition-colors hover:text-foreground"
+            className="flex h-7 w-7 items-center justify-center border border-border text-muted-foreground transition-colors hover:text-foreground dark:border-foreground/30 dark:bg-muted dark:text-foreground dark:hover:border-primary dark:hover:text-primary"
           >
             <ChevronRight className="h-3.5 w-3.5" />
           </button>
@@ -201,7 +201,7 @@ export function ViewModeToggle<M extends string = 'list' | 'calendar'>({
   modes?: readonly M[];
 }) {
   return (
-    <div className="flex border border-border" role="group" aria-label="View">
+    <div className="flex border border-border dark:border-foreground/30" role="group" aria-label="View">
       {modes.map((m) => (
         <button
           key={m}
@@ -210,7 +210,7 @@ export function ViewModeToggle<M extends string = 'list' | 'calendar'>({
           aria-pressed={mode === m}
           className={cn(
             'px-3 py-1.5 text-xs font-medium capitalize transition-colors',
-            mode === m ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'
+            mode === m ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground dark:text-foreground/80 dark:hover:text-primary'
           )}
         >
           {m}
