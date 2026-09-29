@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
-import type { AsyncResult, Meeting, MeetingEdit, MeetingInput } from '@/lib/types';
+import type { AsyncResult, Meeting, MeetingAttendee, MeetingEdit, MeetingInput, RosterMember } from '@/lib/types';
 import { createApiStore } from '@/lib/apiStore';
 import { eventStart, isTba, isUpcoming } from '@/lib/eventDates';
 import { apiFetch } from '@/lib/api';
@@ -9,7 +9,8 @@ import { apiFetch } from '@/lib/api';
 //
 // Team Dashboard > Meetings from GET /api/meetings, shared across views.
 // A meeting is upcoming until it's over (or while its date is TBA), then it
-// moves to the minutes list. Organisers add, edit and delete them in Notion.
+// moves to the minutes list. Organisers add, edit and delete them in Notion;
+// anyone on the committee can say they're going (Notion `Attendees`).
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface MeetingDto {
@@ -21,6 +22,7 @@ interface MeetingDto {
   location: string | null;
   type: string | null;
   createdBy: string | null;
+  attendees: MeetingAttendee[];
   url: string;
 }
 
@@ -28,6 +30,16 @@ interface MeetingsResponse {
   meetings: MeetingDto[];
   canManage: boolean;
   types: string[];
+  roster: RosterMember[];
+  me: string | null;
+}
+
+interface MeetingsState {
+  meetings: Meeting[];
+  canManage: boolean;
+  types: string[];
+  roster: RosterMember[];
+  me: string | null;
 }
 
 function toMeeting(dto: MeetingDto): Meeting {
@@ -40,15 +52,31 @@ function toMeeting(dto: MeetingDto): Meeting {
     location: dto.location ?? undefined,
     type: dto.type ?? undefined,
     createdBy: dto.createdBy ?? undefined,
+    attendees: dto.attendees ?? [],
     notionUrl: dto.url,
   };
 }
 
-const store = createApiStore<MeetingsResponse, { meetings: Meeting[]; canManage: boolean; types: string[] }>(
+const store = createApiStore<MeetingsResponse, MeetingsState>(
   'meetings',
-  (res) => ({ meetings: res.meetings.map(toMeeting), canManage: res.canManage, types: res.types }),
-  { meetings: [], canManage: false, types: [] }
+  (res) => ({
+    meetings: res.meetings.map(toMeeting),
+    canManage: res.canManage,
+    types: res.types,
+    roster: res.roster ?? [],
+    me: res.me ?? null,
+  }),
+  { meetings: [], canManage: false, types: [], roster: [], me: null }
 );
+
+const normaliseName = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
+
+/** Whether a committee member is among a meeting's attendees: by Notion id, else by name. */
+export function isAttending(member: RosterMember, attendees: MeetingAttendee[]): boolean {
+  if (member.notionUserId && attendees.some((a) => a.id === member.notionUserId)) return true;
+  const name = normaliseName(member.name);
+  return attendees.some((a) => normaliseName(a.name) === name);
+}
 
 function startMs(m: Meeting): number | null {
   return eventStart(m)?.getTime() ?? null;
@@ -67,6 +95,12 @@ export interface MeetingsResult extends AsyncResult<Meeting[]> {
   updateMeeting: (id: string, edit: MeetingEdit) => Promise<Meeting>;
   /** Move to Notion's trash. */
   deleteMeeting: (id: string) => Promise<void>;
+  /** The committee (ExCo), for who isn't going. */
+  roster: RosterMember[];
+  /** The signed-in member's Notion user id; null when they have no Notion account. */
+  me: string | null;
+  /** Add or remove the signed-in member from a meeting's attendees. */
+  setGoing: (id: string, going: boolean) => Promise<Meeting>;
 }
 
 export function useMeetings(): MeetingsResult {
@@ -124,6 +158,16 @@ export function useMeetings(): MeetingsResult {
     store.update((v) => ({ ...v, meetings: v.meetings.filter((m) => m.id !== id) }));
   }, []);
 
+  const setGoing = useCallback(async (id: string, going: boolean): Promise<Meeting> => {
+    const { meeting: dto } = await apiFetch<{ meeting: MeetingDto }>(`meetings?id=${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ going }),
+    });
+    const meeting = toMeeting(dto);
+    store.update((v) => ({ ...v, meetings: v.meetings.map((m) => (m.id === id ? meeting : m)) }));
+    return meeting;
+  }, []);
+
   return {
     data: value.meetings,
     isLoading,
@@ -135,5 +179,8 @@ export function useMeetings(): MeetingsResult {
     createMeeting,
     updateMeeting,
     deleteMeeting,
+    roster: value.roster,
+    me: value.me,
+    setGoing,
   };
 }

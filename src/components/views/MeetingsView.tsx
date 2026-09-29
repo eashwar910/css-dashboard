@@ -22,17 +22,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { AlertCircle, CalendarPlus, Clock, Loader2, MapPin, Pencil, Plus, Trash2 } from 'lucide-react';
+import { AlertCircle, CalendarDays, CalendarPlus, Check, Clock, Loader2, MapPin, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useMeetings } from '@/hooks/useMeetings';
+import { isAttending, useMeetings } from '@/hooks/useMeetings';
 import { formatEventDate, formatEventTimeRange, isTba, isUpcoming } from '@/lib/eventDates';
 import { buildTimeline, whenFromEvent, type WhenValue } from '@/lib/eventWhen';
 import { PageBody } from '@/components/PageBody';
 import { RichTextEditor } from '@/components/RichTextEditor';
 import { TbaTag } from '@/components/TbaTag';
+import { DetailFacts } from '@/components/DetailFacts';
 import { EventWhenFields } from '@/components/EventWhenFields';
 import { MonthCalendar, ViewModeToggle } from '@/components/MonthCalendar';
-import type { Meeting } from '@/lib/types';
+import type { Meeting, MeetingAttendee } from '@/lib/types';
 
 const MEETING_CHIP_CLASSES = 'border-sky-500/30 bg-sky-500/10 text-sky-700 hover:bg-sky-500/20 dark:text-sky-400';
 
@@ -150,8 +151,9 @@ export function MeetingsView() {
                       className="group w-full py-3 text-left transition-colors hover:bg-muted/10 sm:px-3"
                     >
                       <span className="block font-serif text-base font-semibold group-hover:text-primary">{m.title}</span>
-                      <span className="mt-1 block">
+                      <span className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
                         <MeetingMeta meeting={m} />
+                        <GoingCount meeting={m} />
                       </span>
                     </button>
                   </li>
@@ -311,10 +313,33 @@ function MeetingDetail({
             </div>
           )}
         </div>
-        <div className="mt-1.5">
-          <MeetingMeta meeting={meeting} />
+        <div className="mt-3">
+          <DetailFacts
+            facts={[
+              { icon: CalendarDays, label: 'Date', value: formatEventDate(meeting, 'EEE, MMM d, yyyy') },
+              ...(isTba(meeting) ? [] : [{ icon: Clock, label: 'Time', value: formatEventTimeRange(meeting) }]),
+              {
+                icon: MapPin,
+                label: 'Venue',
+                value: meeting.location ?? <span className="font-normal text-muted-foreground">Not set</span>,
+              },
+            ]}
+          />
         </div>
-        {meeting.createdBy && <p className="mt-1 text-[11px] text-muted-foreground">Added by {meeting.createdBy}</p>}
+        {(meeting.type || meeting.createdBy) && (
+          <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+            {meeting.type && (
+              <span className="border border-sky-500/30 px-1 text-[10px] uppercase tracking-wider text-sky-700 dark:text-sky-400">
+                {meeting.type}
+              </span>
+            )}
+            {meeting.createdBy && <span>Added by {meeting.createdBy}</span>}
+          </div>
+        )}
+      </div>
+
+      <div className="pt-4">
+        <MeetingAttendance meeting={meeting} />
       </div>
 
       {editing && (
@@ -361,6 +386,149 @@ function MeetingDetail({
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+/** "3 going", with a tick when the signed-in member is one of them. */
+function GoingCount({ meeting }: { meeting: Meeting }) {
+  const { me } = useMeetings();
+  const count = meeting.attendees.length;
+  const mine = !!me && meeting.attendees.some((a) => a.id === me);
+  if (!count) return null;
+  return (
+    <span className={cn('flex items-center gap-1.5 text-xs', mine ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
+      {mine ? <Check className="h-3 w-3 shrink-0" /> : <Users className="h-3 w-3 shrink-0" />}
+      {count} going{mine && ' · including you'}
+    </span>
+  );
+}
+
+function PersonChip({ name, muted }: { name: string; muted?: boolean }) {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join('');
+  return (
+    <li
+      className={cn(
+        'flex items-center gap-1.5 border py-0.5 pl-0.5 pr-2 text-xs',
+        muted ? 'border-border text-muted-foreground' : 'border-emerald-500/40 bg-emerald-500/10 text-foreground'
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          'flex h-5 w-5 items-center justify-center text-[9px] font-semibold',
+          muted ? 'bg-muted text-muted-foreground' : 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+        )}
+      >
+        {initials}
+      </span>
+      {name}
+    </li>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MeetingAttendance — who's going (Notion `Attendees`) and who isn't; anyone
+// on the committee can add or remove themselves while the meeting is upcoming
+// ─────────────────────────────────────────────────────────────────────────────
+
+function MeetingAttendance({ meeting }: { meeting: Meeting }) {
+  const { roster, me, setGoing } = useMeetings();
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+  const upcoming = isUpcomingMeeting(meeting);
+
+  const going: MeetingAttendee[] = useMemo(
+    () => [...meeting.attendees].sort((a, b) => (a.id === me ? -1 : b.id === me ? 1 : a.name.localeCompare(b.name))),
+    [meeting.attendees, me]
+  );
+  const notGoing = useMemo(
+    () => roster.filter((r) => !isAttending(r, meeting.attendees)).sort((a, b) => a.name.localeCompare(b.name)),
+    [roster, meeting.attendees]
+  );
+  const mine = !!me && meeting.attendees.some((a) => a.id === me);
+
+  const toggle = async () => {
+    setSaving(true);
+    try {
+      await setGoing(meeting.id, !mine);
+      toast({ title: mine ? "You're no longer going" : "You're going", description: meeting.title });
+    } catch (err) {
+      toast({ title: "Couldn't update your RSVP", description: (err as Error).message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const goingLabel = upcoming ? 'Going' : 'Attended';
+  const notGoingLabel = upcoming ? 'Not going' : "Didn't attend";
+
+  return (
+    <section aria-label="Attendance" className="border border-border p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <Users className="h-3.5 w-3.5" />
+          {upcoming ? "Who's going" : 'Who attended'}
+        </h4>
+        {upcoming &&
+          (me ? (
+            <button
+              type="button"
+              onClick={() => void toggle()}
+              disabled={saving}
+              aria-pressed={mine}
+              className={cn(
+                'flex items-center gap-1.5 border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-60',
+                mine
+                  ? 'border-emerald-500 bg-emerald-500 text-white hover:border-destructive hover:bg-destructive'
+                  : 'border-primary text-primary hover:bg-primary hover:text-primary-foreground'
+              )}
+            >
+              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : mine ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+              {mine ? "You're going · Can't make it?" : "I'm going"}
+            </button>
+          ) : (
+            <span className="text-[11px] text-muted-foreground">No Notion account is linked to your login, so you can't RSVP.</span>
+          ))}
+      </div>
+
+      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+        <div>
+          <p className="mb-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+            {goingLabel} ({going.length})
+          </p>
+          {going.length ? (
+            <ul className="flex flex-wrap gap-1.5">
+              {going.map((a) => (
+                <PersonChip key={a.id} name={a.id === me ? `${a.name} (you)` : a.name} />
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-muted-foreground">{upcoming ? 'Nobody yet.' : 'Nobody was recorded.'}</p>
+          )}
+        </div>
+        <div>
+          <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">
+            {notGoingLabel} ({notGoing.length})
+          </p>
+          {notGoing.length ? (
+            <ul className="flex flex-wrap gap-1.5">
+              {notGoing.map((r) => (
+                <PersonChip key={r.notionUserId ?? r.name} name={r.name} muted />
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {roster.length ? `Everyone on the committee${upcoming ? ' is going' : ' attended'}.` : "The committee list couldn't be loaded."}
+            </p>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 

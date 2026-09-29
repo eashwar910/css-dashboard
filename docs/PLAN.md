@@ -57,6 +57,7 @@ Restructured 2026-09-29 after the President's review (`scripts/restructure-meeti
   - Edit: title, date/time (or TBA), venue, type (`PATCH /api/meetings?id=`). Delete moves the page to Notion's trash (`DELETE`).
   - Notes (upcoming) and minutes (past) are the page body, edited with the rich-text editor.
   - Everyone else can read them. Nothing is recurring; the weekly meeting is added like any other.
+- **Attendance** is Notion `Attendees` (people). Each meeting shows who's going and who isn't (the ExCo minus the attendees, matched by Notion user id from the member's email, else by name). Any committee member can add or remove **themselves** on an upcoming meeting (`PATCH /api/meetings?id=` with `{ going }`); past meetings show who attended, read-only. Events have no attendance.
 
 **Page bodies** (event Overview, meeting notes/minutes) are edited in a rich-text editor (TipTap, `src/components/RichTextEditor.tsx`), never raw Markdown. Markdown is only the wire format:
 - `GET /api/event-content?id=` returns `editorMarkdown` (from `toEditorMarkdown` in `api/_lib/notionMarkdown.ts`), the stored `source`, and `canEdit`. `PUT` saves with `pages.updateMarkdown` `replace_content`, sending `source` back as `base`; if the page changed meanwhile the server answers 409 instead of overwriting.

@@ -27,6 +27,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import {
   Plus,
+  CalendarDays,
   Clock,
   MapPin,
   CalendarPlus,
@@ -51,6 +52,7 @@ import { useTasks } from '@/hooks/useTasks';
 import { TbaTag } from '@/components/TbaTag';
 import { AddEventDialog } from '@/components/AddEventDialog';
 import { EpfPanel } from '@/components/EpfPanel';
+import { DetailFacts } from '@/components/DetailFacts';
 import { PageBody } from '@/components/PageBody';
 import { MonthCalendar, ViewModeToggle } from '@/components/MonthCalendar';
 import { EventWhenFields } from '@/components/EventWhenFields';
@@ -372,29 +374,49 @@ export function EventsView() {
                 </span>
               </div>
 
-              {/* Title */}
-              <div className="mt-2">
+              {/* Title with edit toggle */}
+              <div className="mt-2 flex items-start gap-2">
                 <DialogTitle className="font-serif text-2xl font-semibold text-foreground">
                   {activeSelectedEvent.title}
                 </DialogTitle>
-              </div>
-
-              {/* Date row with edit toggle */}
-              <div className="flex items-center gap-2 mt-0.5">
-                <DialogDescription className="text-xs text-muted-foreground">
-                  {formatEventDate(activeSelectedEvent, 'EEEE, MMMM d, yyyy')}
-                </DialogDescription>
                 {!editingDetails && (
                   <button
                     type="button"
                     title="Edit name, date, time and location"
                     aria-label="Edit name, date, time and location"
                     onClick={() => setEditingDetails(true)}
-                    className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                    className="mt-1.5 p-1 text-muted-foreground hover:text-primary transition-colors"
                   >
-                    <Pencil className="h-3 w-3" />
+                    <Pencil className="h-3.5 w-3.5" />
                   </button>
                 )}
+              </div>
+              <DialogDescription className="sr-only">
+                {formatEventDate(activeSelectedEvent, 'EEEE, MMMM d, yyyy')}
+              </DialogDescription>
+
+              {/* ── Date, time & location ── */}
+              <div className="pt-3 text-left">
+                <DetailFacts
+                  facts={[
+                    {
+                      icon: CalendarDays,
+                      label: 'Date',
+                      value: formatEventDate(activeSelectedEvent, 'EEE, MMM d, yyyy'),
+                    },
+                    ...(isTba(activeSelectedEvent)
+                      ? []
+                      : [{ icon: Clock, label: 'Time', value: formatEventTimeRange(activeSelectedEvent) }]),
+                    {
+                      icon: MapPin,
+                      label: 'Location',
+                      value: activeSelectedEvent.location ?? <span className="font-normal text-muted-foreground">Not set</span>,
+                    },
+                    ...(EVENT_FEATURES.rsvp
+                      ? [{ icon: Users, label: 'Going', value: activeSelectedEvent.rsvpCount }]
+                      : []),
+                  ]}
+                />
               </div>
             </DialogHeader>
 
@@ -459,26 +481,6 @@ export function EventsView() {
                   </button>
                 );
               })}
-            </div>
-
-            {/* ── Timing & Location bar (always visible) ── */}
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border py-3 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5 shrink-0" />
-                {formatEventTimeRange(activeSelectedEvent)}
-              </span>
-              {activeSelectedEvent.location && (
-                <span className="flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5 shrink-0" />
-                  {activeSelectedEvent.location}
-                </span>
-              )}
-              {EVENT_FEATURES.rsvp && (
-                <span className="flex items-center gap-1.5">
-                  <Users className="h-3.5 w-3.5 shrink-0" />
-                  {activeSelectedEvent.rsvpCount} Going
-                </span>
-              )}
             </div>
 
             {/* ── EPF ── */}

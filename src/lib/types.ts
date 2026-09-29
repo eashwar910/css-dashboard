@@ -136,7 +136,22 @@ export interface Meeting {
   /** Notion `Type`: JC / ExCo / Weekly Meeting. */
   type?: string;
   createdBy?: string;
+  /** Notion `Attendees`: who's going (upcoming) or went (past). */
+  attendees: MeetingAttendee[];
   notionUrl: string;
+}
+
+export interface MeetingAttendee {
+  /** Notion user id. */
+  id: string;
+  name: string;
+}
+
+/** A committee member, for listing who isn't going to a meeting. */
+export interface RosterMember {
+  name: string;
+  /** null when they have no matching Notion account; matched on name instead. */
+  notionUserId: string | null;
 }
 
 /** A new meeting: date YYYY-MM-DD and time HH:mm (Malaysia time). */

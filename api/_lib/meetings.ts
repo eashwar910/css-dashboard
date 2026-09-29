@@ -1,7 +1,8 @@
 // Team Dashboard > Meetings → the Meetings tab. A meeting's minutes are its
 // page body. Upcoming vs past is worked out from `Date` on the client; there's
 // no status property to go stale. Organisers (roles.ts) add, edit and delete. Restructured by
-// scripts/restructure-meetings-and-weeks.mjs.
+// scripts/restructure-meetings-and-weeks.mjs. `Attendees` (people) is who's going: any
+// committee member can add or remove themselves.
 
 import type { PageObjectResponse } from '@notionhq/client';
 import type { CommitteeMember } from './auth.js';
@@ -11,7 +12,8 @@ import { dates } from './events.js';
 import { date, people, select, title, write } from './props.js';
 import { parseTimeline } from './eventWrites.js';
 import { isOrganiser, ORGANISER_ONLY } from './roles.js';
-import { notionUserIdFor } from './users.js';
+import { getNotionUserIdForMemberEmail, notionUserIdFor } from './users.js';
+import { loadTeam } from './team.js';
 
 export interface MeetingDto {
   id: string;
@@ -24,7 +26,15 @@ export interface MeetingDto {
   /** `Type`: JC / ExCo / Weekly Meeting. */
   type: string | null;
   createdBy: string | null;
+  /** `Attendees`: who's going (upcoming) or went (past). */
+  attendees: AttendeeDto[];
   url: string;
+}
+
+export interface AttendeeDto {
+  /** Notion user id. */
+  id: string;
+  name: string;
 }
 
 export function toMeeting(page: PageObjectResponse): MeetingDto {
@@ -35,6 +45,9 @@ export function toMeeting(page: PageObjectResponse): MeetingDto {
     location: select(page, 'Venue'),
     type: select(page, 'Type'),
     createdBy: people(page, 'Created By')[0]?.name ?? null,
+    attendees: people(page, 'Attendees')
+      .filter((p) => p.kind === 'person' || p.kind === 'unknown')
+      .map((p) => ({ id: p.id, name: p.name ?? 'Former member' })),
     url: page.url,
   };
 }
@@ -45,6 +58,43 @@ export async function meetingPages(): Promise<PageObjectResponse[]> {
 
 export async function loadMeetings(): Promise<MeetingDto[]> {
   return (await meetingPages()).map(toMeeting);
+}
+
+/** A committee member (ExCo), for working out who isn't going. */
+export interface RosterMemberDto {
+  name: string;
+  /** null when they have no Notion account we can match; then matched on name. */
+  notionUserId: string | null;
+}
+
+/** The ExCo, each with their Notion user id where one can be found by email. */
+export async function loadRoster(): Promise<RosterMemberDto[]> {
+  const team = await loadTeam();
+  return Promise.all(
+    team.map(async (m) => ({ name: m.name, notionUserId: await getNotionUserIdForMemberEmail(m.email) })),
+  );
+}
+
+// ── Attendance (any committee member, for themselves) ────────────────────────
+
+/** Add the signed-in member to `Attendees` (going) or take them off it. */
+export async function setAttendance(member: CommitteeMember, id: string, going: unknown): Promise<MeetingDto> {
+  if (typeof going !== 'boolean') throw new HttpError(400, 'going must be true or false');
+  const userId = await notionUserIdFor(member);
+  if (!userId) throw new HttpError(409, "Your Notion account couldn't be found, so you can't be added as an attendee");
+
+  // Read fresh so someone else's change a moment ago isn't overwritten
+  const current = await retrievePageIn('meetings', id);
+  if (!current) throw new HttpError(404, 'Meeting not found');
+  const ids = people(current, 'Attendees').map((p) => p.id);
+  if (going === ids.includes(userId)) return toMeeting(current);
+  const next = going ? [...ids, userId] : ids.filter((x) => x !== userId);
+
+  const page = await notion().pages.update({ page_id: id, properties: { Attendees: write.people(next) } });
+  cacheInvalidate('meetings:');
+
+  if (!('properties' in page)) throw new HttpError(502, 'Notion did not return the updated meeting');
+  return toMeeting(page);
 }
 
 // ── Writes (organisers only: roles.ts) ───────────────────────────────────────
