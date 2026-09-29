@@ -155,7 +155,7 @@ async function deleteTask(id: string): Promise<void> {
 export const GENERAL_GROUP = 'General';
 
 export interface PersonGroup {
-  /** Notion user id, or 'group:Everyone' / 'group:Unassigned'. */
+  /** Notion user id. */
   key: string;
   name: string;
   /** The signed-in member's own group. */
@@ -164,31 +164,21 @@ export interface PersonGroup {
 }
 
 /**
- * One group per PIC person (a task with several PICs appears under each),
- * then "Everyone" (Notion's Everyone group), then "Unassigned".
+ * One group per PIC person (a task with several PICs appears under each).
  * The signed-in member's group comes first; the rest are alphabetical.
+ * Weekly to-dos are individual only, so tasks with no PIC person never get here.
  */
 function groupByPerson(tasks: Task[], myUserId: string | null): PersonGroup[] {
   const people = new Map<string, PersonGroup>();
-  const teams = new Map<string, PersonGroup>();
   for (const task of tasks) {
-    if (task.assignees.length) {
-      for (const person of task.assignees) {
-        const group = people.get(person.id) ?? { key: person.id, name: person.name, isMe: person.id === myUserId, tasks: [] };
-        group.tasks.push(task);
-        people.set(person.id, group);
-      }
-      continue;
+    for (const person of task.assignees) {
+      const group = people.get(person.id) ?? { key: person.id, name: person.name, isMe: person.id === myUserId, tasks: [] };
+      group.tasks.push(task);
+      people.set(person.id, group);
     }
-    const name = task.sharedWith ?? 'Unassigned';
-    const group = teams.get(name) ?? { key: `group:${name}`, name, isMe: false, tasks: [] };
-    group.tasks.push(task);
-    teams.set(name, group);
   }
   const byName = (a: PersonGroup, b: PersonGroup) => a.name.localeCompare(b.name);
-  const ordered = [...people.values()].sort((a, b) => Number(b.isMe) - Number(a.isMe) || byName(a, b));
-  const groups = [...teams.values()].sort((a, b) => Number(a.name === 'Unassigned') - Number(b.name === 'Unassigned') || byName(a, b));
-  return [...ordered, ...groups];
+  return [...people.values()].sort((a, b) => Number(b.isMe) - Number(a.isMe) || byName(a, b));
 }
 
 export interface TasksResult extends AsyncResult<Task[]> {
@@ -200,9 +190,9 @@ export interface TasksResult extends AsyncResult<Task[]> {
   completedCount: number;
   /** Total task count. */
   totalCount: number;
-  /** Everyone's to-dos for this week (planned this week, or still open). */
+  /** Everyone's individual to-dos for this week (planned this week, or still open). */
   thisWeek: Task[];
-  /** Everyone's to-dos planned for last week, Done or not. */
+  /** Everyone's individual to-dos planned for last week, Done or not. */
   lastWeek: Task[];
   /** thisWeek grouped by person (you first). */
   thisWeekGroups: PersonGroup[];
@@ -256,8 +246,9 @@ export function useTasks(): TasksResult {
 
   const completedCount = useMemo(() => data.filter((t) => t.completed).length, [data]);
 
-  const thisWeek = useMemo(() => data.filter((t) => t.thisWeek), [data]);
-  const lastWeek = useMemo(() => data.filter((t) => t.lastWeek), [data]);
+  // Weekly is individual to-dos only: tasks for "Everyone" or nobody are left out.
+  const thisWeek = useMemo(() => data.filter((t) => t.thisWeek && t.assignees.length > 0), [data]);
+  const lastWeek = useMemo(() => data.filter((t) => t.lastWeek && t.assignees.length > 0), [data]);
   const thisWeekGroups = useMemo(() => groupByPerson(thisWeek, value.notionUserId), [thisWeek, value.notionUserId]);
   const lastWeekGroups = useMemo(() => groupByPerson(lastWeek, value.notionUserId), [lastWeek, value.notionUserId]);
 
