@@ -56,6 +56,7 @@ import { DetailFacts } from '@/components/DetailFacts';
 import { PageBody } from '@/components/PageBody';
 import { MonthCalendar, ViewModeToggle } from '@/components/MonthCalendar';
 import { EventTimeline } from '@/components/EventTimeline';
+import { NoEpfBadge } from '@/components/NoEpfBadge';
 import { EventWhenFields } from '@/components/EventWhenFields';
 import { buildTimeline, whenFromEvent, type WhenValue } from '@/lib/eventWhen';
 import { useEpfs } from '@/hooks/useEpfs';
@@ -150,7 +151,9 @@ export function EventsView() {
   const { data: allEvents, tba: tbaEvents, isLoading, error, createEvent, rsvpEvent, saveEvent, deleteEvent, canDelete } = useEvents();
   const [deleting, setDeleting] = useState(false);
 
-  const { byEvent: epfsByEvent } = useEpfs();
+  const { byEvent: epfsByEvent, isLoading: epfsLoading, error: epfsError } = useEpfs();
+  // Only claim "no EPF" once the list has actually loaded
+  const epfsKnown = !epfsLoading && !epfsError;
 
   // Event detail dialog tab state
   const [eventDetailTab, setEventDetailTab] = useState<'overview' | 'todo' | 'finance'>('overview');
@@ -218,7 +221,7 @@ export function EventsView() {
             events={allEvents}
             isLoading={isLoading}
             onSelect={setSelectedEvent}
-            hasEpf={(id) => !!epfsByEvent[id]}
+            epfStatus={(id) => (epfsByEvent[id] ? 'uploaded' : epfsKnown ? 'missing' : 'unknown')}
           />
         </section>
       ) : mode === 'calendar' ? (
@@ -310,7 +313,7 @@ export function EventsView() {
                       {/* Right metadata / actions on desktop, bottom bar on mobile */}
                       <div className="flex shrink-0 items-center justify-between sm:justify-end gap-3 sm:flex-col sm:items-end sm:gap-2 pt-1 sm:pt-0 border-t border-border/40 sm:border-0">
                         <div className="flex items-center gap-1.5">
-                          {epfsByEvent[event.id] && (
+                          {epfsByEvent[event.id] ? (
                             <Badge
                               variant="outline"
                               title="EPF uploaded"
@@ -319,6 +322,8 @@ export function EventsView() {
                               <FileCheck2 className="mr-1 h-3 w-3" />
                               EPF
                             </Badge>
+                          ) : (
+                            epfsKnown && <NoEpfBadge />
                           )}
                           {event.status && (
                             <Badge variant="outline" className="text-[10px]">

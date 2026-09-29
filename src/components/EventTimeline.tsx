@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { DetailFacts } from '@/components/DetailFacts';
+import { NoEpfBadge } from '@/components/NoEpfBadge';
 import type { Event, EventStatus } from '@/lib/types';
 import { eventStart, formatEventDate, formatEventTimeRange } from '@/lib/eventDates';
 
@@ -76,11 +77,11 @@ interface EventTimelineProps {
   events: Event[];
   isLoading: boolean;
   onSelect: (event: Event) => void;
-  /** Events with an uploaded EPF, for the badge in the hover card. */
-  hasEpf: (eventId: string) => boolean;
+  /** For the EPF / NO EPF badge in the hover card; 'unknown' while EPFs load. */
+  epfStatus: (eventId: string) => 'uploaded' | 'missing' | 'unknown';
 }
 
-export function EventTimeline({ events, isLoading, onSelect, hasEpf }: EventTimelineProps) {
+export function EventTimeline({ events, isLoading, onSelect, epfStatus }: EventTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const today = startOfDay(new Date());
   const todayInRange = today >= RANGE_START && today <= RANGE_END;
@@ -274,12 +275,13 @@ export function EventTimeline({ events, isLoading, onSelect, hasEpf }: EventTime
                       Event
                     </Badge>
                     <Badge variant="outline" className="text-[10px]">{STATUS_LABELS[status]}</Badge>
-                    {hasEpf(event.id) && (
+                    {epfStatus(event.id) === 'uploaded' && (
                       <Badge variant="outline" className="border-emerald-500/40 text-[10px] text-emerald-600 dark:text-emerald-400">
                         <FileCheck2 className="mr-1 h-3 w-3" />
                         EPF
                       </Badge>
                     )}
+                    {epfStatus(event.id) === 'missing' && <NoEpfBadge />}
                   </div>
                   <h3 className="mt-2 font-serif text-lg font-semibold leading-snug text-foreground">{event.title}</h3>
                   <div className="mt-3">
