@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useToast } from '@/hooks/use-toast';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 
 function getInitials(name: string) {
@@ -23,6 +24,14 @@ function getInitials(name: string) {
 
 export function TeamView() {
   const { data: members, byYear, isLoading, error } = useTeamMembers();
+  const { toast } = useToast();
+
+  const copyEmail = (email: string) => {
+    navigator.clipboard.writeText(email).then(
+      () => toast({ title: 'Email copied', description: email }),
+      () => toast({ title: "Couldn't copy email", description: email, variant: 'destructive' })
+    );
+  };
 
   // Filter and search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -212,14 +221,16 @@ export function TeamView() {
 
                   {/* Mobile-only contact button */}
                   {member.email && (
-                    <a
-                      href={`mailto:${member.email}`}
+                    <button
+                      type="button"
+                      onClick={() => copyEmail(member.email!)}
                       className="flex sm:hidden items-center gap-1 border border-border px-2 py-1 text-xs text-primary hover:bg-muted/20"
-                      aria-label={`Email ${member.name}`}
+                      aria-label={`Copy ${member.name}'s email`}
+                      title={member.email}
                     >
                       <Mail className="h-3 w-3 shrink-0" />
                       <span>Email</span>
-                    </a>
+                    </button>
                   )}
                 </div>
 
@@ -247,14 +258,16 @@ export function TeamView() {
 
                 {/* Desktop: Contact link */}
                 {member.email ? (
-                  <a
-                    href={`mailto:${member.email}`}
+                  <button
+                    type="button"
+                    onClick={() => copyEmail(member.email!)}
                     className="hidden sm:flex items-center gap-1.5 text-xs text-primary hover:underline"
-                    aria-label={`Email ${member.name}`}
+                    aria-label={`Copy ${member.name}'s email`}
+                    title={member.email}
                   >
                     <Mail className="h-3 w-3 shrink-0" />
                     <span>Email</span>
-                  </a>
+                  </button>
                 ) : (
                   <span className="hidden sm:block text-xs text-muted-foreground" aria-label="No email on file">—</span>
                 )}
