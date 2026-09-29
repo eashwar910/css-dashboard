@@ -52,6 +52,12 @@ async function setReimbursementStatus(id: string, reimbursementStatus: Reimburse
   return res.transaction;
 }
 
+/** Move to Notion's trash. The row disappears once the server confirms. */
+async function deleteTransaction(id: string) {
+  const res = await apiFetch<{ finance: FinanceData }>(`finance?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+  store.update(() => res.finance);
+}
+
 export interface FinanceResult extends AsyncResult<Transaction[]> {
   totals: FinanceData['totals'];
   /** Canonical Notion option values (NOTION_MAPPING.md). */
@@ -60,6 +66,8 @@ export interface FinanceResult extends AsyncResult<Transaction[]> {
   totalsForEvent: (eventId: string) => FinanceTotals;
   createTransaction: (input: TransactionInput) => Promise<{ transaction: Transaction; warning: string | null }>;
   setReimbursementStatus: (id: string, status: ReimbursementStatus) => Promise<Transaction>;
+  /** Admins, or whoever recorded it (see Transaction.canDelete). */
+  deleteTransaction: (id: string) => Promise<void>;
 }
 
 export function useFinance(): FinanceResult {
@@ -85,5 +93,6 @@ export function useFinance(): FinanceResult {
     totalsForEvent,
     createTransaction,
     setReimbursementStatus,
+    deleteTransaction,
   };
 }

@@ -126,6 +126,8 @@ Every ringgit in or out is one row. Exact property names and options are in `NOT
 - A reimbursement is an Expense row with Paid By = Member, so each expense is counted exactly once.
 - The dashboard shows income, spending, balance, and outstanding reimbursements, per event and overall. Outstanding means Paid By = Member and status not Paid Back.
 - Permissions: any committee member can add entries and change reimbursement status for now. This may be restricted to admin/treasurer later.
+- Deleting: admins, or the member in `Recorded by`, can delete a transaction (trash icon on each row; moves it to Notion's trash, restorable for 30 days). Checked server-side on `DELETE /api/finance?id=`.
+- PDF export: on the Finance page, tick rows under All transactions and press Export PDF. Built in the browser (jsPDF), with income, spending and net totals for the selected rows.
 - Validation (server): Type required; Amount > 0; Claimant and Reimbursement Status only when Paid By = Member; Paid By = Member only for expenses. A Member-paid expense defaults to Pending, and to the creator as Claimant if none is picked. Paid By defaults to Society Account. Date defaults to today (Kuala Lumpur).
 - Receipts: shown as a link to the transaction's Notion page (no upload yet).
 - The one existing row in Transactions is a test row. It can be deleted once finance works.

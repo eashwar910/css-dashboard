@@ -1,5 +1,7 @@
-import { useMemo } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { AlertCircle, FileDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFinance } from '@/hooks/useFinance';
 import { useEvents } from '@/hooks/useEvents';
@@ -14,6 +16,28 @@ import { AddTransactionForm, FinanceSummary, TransactionList } from '@/component
 export function FinanceView() {
   const { data: transactions, totals, isLoading, error } = useFinance();
   const { data: events } = useEvents();
+  const { toast } = useToast();
+  const [picked, setPicked] = useState<Set<string>>(() => new Set());
+  const [exporting, setExporting] = useState(false);
+
+  // Only ids still in the list count (a picked row may have been deleted).
+  const selected = useMemo(() => new Set(transactions.filter((t) => picked.has(t.id)).map((t) => t.id)), [transactions, picked]);
+  const allSelected = transactions.length > 0 && selected.size === transactions.length;
+
+  const exportPdf = async () => {
+    setExporting(true);
+    try {
+      const { exportTransactionsPdf } = await import('@/lib/transactionsPdf');
+      exportTransactionsPdf(
+        transactions.filter((t) => selected.has(t.id)),
+        new Map(events.map((e) => [e.id, e.title]))
+      );
+    } catch (err) {
+      toast({ title: "Couldn't export the PDF", description: (err as Error).message, variant: 'destructive' });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const outstanding = useMemo(
     () => transactions.filter((t) => t.paidBy === 'Member' && t.reimbursementStatus !== 'Paid Back'),
@@ -99,7 +123,39 @@ export function FinanceView() {
               <h2 className="font-serif text-lg font-semibold">All transactions</h2>
             </div>
             <AddTransactionForm />
-            <TransactionList transactions={transactions} emptyText="No transactions yet." showEvent />
+            {transactions.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3 border-b border-border pb-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setPicked(allSelected ? new Set() : new Set(transactions.map((t) => t.id)))}
+                  className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                >
+                  {allSelected ? 'Clear selection' : 'Select all'}
+                </button>
+                <span className="text-muted-foreground">
+                  {selected.size === 0 ? 'Tick transactions to export them as a PDF.' : `${selected.size} selected`}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  style={{ borderRadius: 0 }}
+                  className="ml-auto h-8 text-xs"
+                  disabled={selected.size === 0 || exporting}
+                  onClick={exportPdf}
+                >
+                  <FileDown className="mr-1 h-3.5 w-3.5" />
+                  {exporting ? 'Exporting…' : 'Export PDF'}
+                </Button>
+              </div>
+            )}
+            <TransactionList
+              transactions={transactions}
+              emptyText="No transactions yet."
+              showEvent
+              selected={selected}
+              onSelectedChange={setPicked}
+            />
           </section>
         </>
       )}

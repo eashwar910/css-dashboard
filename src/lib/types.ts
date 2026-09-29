@@ -245,9 +245,13 @@ export interface Transaction {
   claimant: { id: string; name: string | null } | null;
   reimbursementStatus: ReimbursementStatus | null;
   recordedBy: string | null;
+  /** Notion user id of `Recorded by`. */
+  recordedById: string | null;
   receiptCount: number;
   /** Notion page (receipts are viewed there). */
   url: string;
+  /** You may delete it: admins, or whoever recorded it. The server re-checks. */
+  canDelete: boolean;
 }
 
 export interface FinanceTotals {

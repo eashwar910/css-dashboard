@@ -1,4 +1,4 @@
-// Finance Tracker > Transactions: read with totals, create, change reimbursement status.
+// Finance Tracker > Transactions: read with totals, create, change reimbursement status, delete.
 // Rules: docs/PLAN.md "Finance". Property names and options are the canonical
 // ones from NOTION_MAPPING.md ("Paid By", "Reimbursement Status", "Recorded by").
 
@@ -34,9 +34,13 @@ export interface TransactionDto {
   claimant: { id: string; name: string | null } | null;
   reimbursementStatus: ReimbursementStatus | null;
   recordedBy: string | null;
+  /** Notion user id of `Recorded by`, for the delete rule. */
+  recordedById: string | null;
   /** Receipts are viewed on the Notion page (file URLs expire). */
   receiptCount: number;
   url: string;
+  /** The signed-in member may delete it (admin, or they recorded it). Set per request by withPermissions. */
+  canDelete: boolean;
 }
 
 export interface FinanceTotals {
@@ -78,8 +82,24 @@ export function toTransaction(page: PageObjectResponse): TransactionDto {
     claimant: claimant ? { id: claimant.id, name: claimant.name } : null,
     reimbursementStatus: oneOf(FINANCE_OPTIONS.reimbursementStatuses, select(page, 'Reimbursement Status')),
     recordedBy: people(page, 'Recorded by')[0]?.name ?? null,
+    recordedById: people(page, 'Recorded by')[0]?.id ?? null,
     receiptCount: files(page, 'Receipt').length,
     url: page.url,
+    canDelete: false,
+  };
+}
+
+/** Admins, or the member who recorded it. Re-checked in deleteTransaction. */
+function mayDelete(member: Pick<CommitteeMember, 'isAdmin'>, notionUserId: string | null, recordedById: string | null): boolean {
+  return member.isAdmin || (notionUserId !== null && notionUserId === recordedById);
+}
+
+/** Fill in `canDelete` for the signed-in member. */
+export async function withPermissions(member: CommitteeMember, finance: FinanceData): Promise<FinanceData> {
+  const me = await notionUserIdFor(member);
+  return {
+    ...finance,
+    transactions: finance.transactions.map((t) => ({ ...t, canDelete: mayDelete(member, me, t.recordedById) })),
   };
 }
 
@@ -251,4 +271,16 @@ export async function setReimbursementStatus(transactionId: string, value: unkno
   const fresh = await retrievePageIn('transactions', transactionId);
   if (!fresh) throw new HttpError(404, 'Transaction not found after update');
   return toTransaction(fresh);
+}
+
+/** Move a transaction to Notion's trash (restorable there). Admins, or the member who recorded it. */
+export async function deleteTransaction(member: CommitteeMember, transactionId: string): Promise<void> {
+  const page = await retrievePageIn('transactions', transactionId);
+  if (!page) throw new HttpError(404, 'Transaction not found');
+  const recordedById = people(page, 'Recorded by')[0]?.id ?? null;
+  if (!mayDelete(member, await notionUserIdFor(member), recordedById)) {
+    throw new HttpError(403, 'Only the person who recorded this transaction, or an admin, can delete it');
+  }
+  await notion().pages.update({ page_id: transactionId, in_trash: true });
+  cacheInvalidate('transactions:');
 }

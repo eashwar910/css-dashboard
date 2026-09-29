@@ -1,8 +1,19 @@
 import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
-import { ExternalLink, Paperclip, Plus, TrendingDown, TrendingUp } from 'lucide-react';
+import { ExternalLink, Paperclip, Plus, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -76,22 +87,84 @@ function StatusSelect({ transaction }: { transaction: Transaction }) {
   );
 }
 
+/** Confirm, then move a transaction to Notion's trash. The dialog stays open until Notion confirms. */
+function DeleteTransactionDialog({ transaction, onClose }: { transaction: Transaction | null; onClose: () => void }) {
+  const { deleteTransaction } = useFinance();
+  const { toast } = useToast();
+  const [deleting, setDeleting] = useState(false);
+
+  return (
+    <AlertDialog open={!!transaction} onOpenChange={(open) => !open && !deleting && onClose()}>
+      <AlertDialogContent style={{ borderRadius: 0 }} className="border-border">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="font-serif text-lg font-semibold">Delete transaction</AlertDialogTitle>
+          <AlertDialogDescription className="text-xs text-muted-foreground">
+            &ldquo;{transaction?.description}&rdquo; ({formatRM(transaction?.amount)}) will be moved to Notion&apos;s trash and
+            taken out of every total. It can be restored from the trash in Notion for 30 days.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="mt-4 gap-2">
+          <AlertDialogCancel style={{ borderRadius: 0 }} disabled={deleting}>
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            style={{ borderRadius: 0 }}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            disabled={deleting}
+            onClick={async (e) => {
+              e.preventDefault();
+              if (!transaction) return;
+              setDeleting(true);
+              try {
+                await deleteTransaction(transaction.id);
+                toast({ title: 'Transaction deleted', description: `"${transaction.description}" was moved to Notion's trash.` });
+                onClose();
+              } catch (err) {
+                toast({ title: "Couldn't delete the transaction", description: (err as Error).message, variant: 'destructive' });
+              } finally {
+                setDeleting(false);
+              }
+            }}
+          >
+            {deleting ? 'Deleting…' : 'Delete'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 export function TransactionList({
   transactions,
   emptyText,
   showEvent = false,
+  selected,
+  onSelectedChange,
 }: {
   transactions: Transaction[];
   emptyText: string;
   showEvent?: boolean;
+  /** With these, each row gets a checkbox (e.g. to pick rows for a PDF). */
+  selected?: Set<string>;
+  onSelectedChange?: (next: Set<string>) => void;
 }) {
   const { data: events } = useEvents();
   const eventNames = useMemo(() => new Map(events.map((e) => [e.id, e.title])), [events]);
+  const [toDelete, setToDelete] = useState<Transaction | null>(null);
 
   if (transactions.length === 0) return <p className="text-xs text-muted-foreground italic">{emptyText}</p>;
 
+  const toggle = (id: string) => {
+    if (!selected || !onSelectedChange) return;
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onSelectedChange(next);
+  };
+
   return (
     <div className="divide-y divide-border">
+      <DeleteTransactionDialog transaction={toDelete} onClose={() => setToDelete(null)} />
       {transactions.map((t) => {
         const income = t.type === 'Income';
         const when = parseDate(t.date);
@@ -102,7 +175,15 @@ export function TransactionList({
           t.paidBy === 'Member' ? `Paid by ${t.claimant?.name ?? 'a member'}` : null,
         ].filter(Boolean);
         return (
-          <div key={t.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5">
+          <div key={t.id} className={cn('group flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5', selected?.has(t.id) && 'bg-primary/5')}>
+            {selected && (
+              <Checkbox
+                checked={selected.has(t.id)}
+                onCheckedChange={() => toggle(t.id)}
+                aria-label={`Select "${t.description}"`}
+                className="shrink-0"
+              />
+            )}
             <span className={cn('text-xs shrink-0', income ? 'text-emerald-600' : 'text-destructive')}>
               {income ? '+' : '–'}
             </span>
@@ -124,6 +205,19 @@ export function TransactionList({
             <span className={cn('w-24 shrink-0 text-right text-xs font-semibold', income ? 'text-emerald-600' : 'text-destructive')}>
               {formatRM(t.amount)}
             </span>
+            {t.canDelete ? (
+              <button
+                type="button"
+                title="Delete transaction"
+                aria-label={`Delete transaction ${t.description}`}
+                onClick={() => setToDelete(t)}
+                className="shrink-0 p-1 text-muted-foreground transition-colors hover:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            ) : (
+              <span className="w-[22px] shrink-0" aria-hidden />
+            )}
           </div>
         );
       })}
