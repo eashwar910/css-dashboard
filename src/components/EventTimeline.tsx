@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { addDays, differenceInCalendarDays, eachMonthOfInterval, eachWeekOfInterval, format, startOfDay } from 'date-fns';
-import { CalendarDays, Clock, FileCheck2, MapPin } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Clock, FileCheck2, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -85,28 +85,86 @@ export function EventTimeline({ events, isLoading, onSelect, hasEpf }: EventTime
   const today = startOfDay(new Date());
   const todayInRange = today >= RANGE_START && today <= RANGE_END;
 
-  const { placed, outside } = useMemo(() => {
-    const dated = events.filter((e) => eventStart(e) !== null);
-    const inRange = dated.filter((e) => {
-      const d = startOfDay(eventStart(e)!);
-      return d >= RANGE_START && d <= RANGE_END;
-    });
-    return { placed: place(inRange), outside: dated.length - inRange.length };
-  }, [events]);
+  const placed = useMemo(
+    () =>
+      place(
+        events.filter((e) => {
+          const start = eventStart(e);
+          return start !== null && startOfDay(start) >= RANGE_START && startOfDay(start) <= RANGE_END;
+        })
+      ),
+    [events]
+  );
 
   const months = eachMonthOfInterval({ start: RANGE_START, end: RANGE_END });
   const weeks = eachWeekOfInterval({ start: RANGE_START, end: RANGE_END }, { weekStartsOn: 1 }).filter((w) => w >= RANGE_START);
 
+  const scrollToToday = (behavior: ScrollBehavior = 'smooth') => {
+    const el = scrollRef.current;
+    if (el && todayInRange) el.scrollTo({ left: Math.max(0, xFor(today) - el.clientWidth / 3), behavior });
+  };
+  const scrollByPage = (direction: 1 | -1) => {
+    const el = scrollRef.current;
+    if (el) el.scrollBy({ left: direction * el.clientWidth * 0.8, behavior: 'smooth' });
+  };
+
   // Open scrolled to today (a third of the way in), else at the start
   useEffect(() => {
-    const el = scrollRef.current;
-    if (el && todayInRange) el.scrollLeft = Math.max(0, xFor(today) - el.clientWidth / 3);
+    scrollToToday('auto');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading]);
 
+  // A vertical mouse wheel scrolls the line sideways; at either end the page scrolls as usual
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      const atStart = el.scrollLeft <= 0;
+      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1;
+      if ((e.deltaY < 0 && atStart) || (e.deltaY > 0 && atEnd)) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [isLoading]);
+
+  // Click and drag to pan. A drag of more than a few pixels doesn't count as a click on a dot.
+  const drag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return;
+    drag.current = { x: e.clientX, left: e.currentTarget.scrollLeft, moved: false };
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    const dx = e.clientX - d.x;
+    if (!d.moved && Math.abs(dx) < 4) return;
+    if (!d.moved) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      setDragging(true);
+    }
+    d.moved = true;
+    e.currentTarget.scrollLeft = d.left - dx;
+  };
+  const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    setDragging(false);
+    // Leave `moved` set until the click that follows this pointerup has been swallowed
+    setTimeout(() => (drag.current = null));
+  };
+  const swallowClickAfterDrag = (e: React.MouseEvent) => {
+    if (drag.current?.moved) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  };
+
   if (isLoading) return <Skeleton className="h-64 w-full" />;
 
-  const tbaCount = events.length - placed.length - outside;
+  const navButton = 'flex h-7 items-center border border-border px-2 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary';
 
   return (
     <div className="space-y-3">
@@ -118,12 +176,30 @@ export function EventTimeline({ events, isLoading, onSelect, hasEpf }: EventTime
           </span>
         ))}
         <span>Numbers on the line are Mondays</span>
-        <span className="ml-auto">
-          {format(RANGE_START, 'MMM d, yyyy')} – {format(RANGE_END, 'MMM d, yyyy')}
-        </span>
+        <div className="ml-auto flex items-center gap-1">
+          <button type="button" onClick={() => scrollByPage(-1)} aria-label="Scroll back" className={navButton}>
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </button>
+          {todayInRange && (
+            <button type="button" onClick={() => scrollToToday()} className={navButton}>
+              Today
+            </button>
+          )}
+          <button type="button" onClick={() => scrollByPage(1)} aria-label="Scroll forward" className={navButton}>
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
-      <div ref={scrollRef} className="scrollbar-thin overflow-x-auto border border-border bg-muted/10">
+      <div
+        ref={scrollRef}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onClickCapture={swallowClickAfterDrag}
+        className="scrollbar-thin cursor-grab select-none overflow-x-auto border border-border bg-muted/10 active:cursor-grabbing"
+      >
         <div className="relative" style={{ width: TRACK_WIDTH, height: TRACK_HEIGHT }}>
           {/* Month bands */}
           {months.map((m, i) => {
@@ -192,7 +268,7 @@ export function EventTimeline({ events, isLoading, onSelect, hasEpf }: EventTime
                     />
                   </button>
                 </HoverCardTrigger>
-                <HoverCardContent side="top" style={{ borderRadius: 0 }} className="w-96 border-border p-4">
+                <HoverCardContent side="top" style={{ borderRadius: 0 }} className={cn('w-96 border-border p-4', dragging && 'hidden')}>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" style={{ borderRadius: 0 }} className="text-[10px] uppercase tracking-wider">
                       Event
@@ -227,17 +303,6 @@ export function EventTimeline({ events, isLoading, onSelect, hasEpf }: EventTime
         </div>
       </div>
 
-      {(tbaCount > 0 || outside > 0) && (
-        <p className="text-xs text-muted-foreground">
-          {[
-            tbaCount > 0 && `${tbaCount} ${tbaCount === 1 ? 'event has' : 'events have'} no date yet`,
-            outside > 0 && `${outside} ${outside === 1 ? 'event falls' : 'events fall'} outside this range`,
-          ]
-            .filter(Boolean)
-            .join(' and ')}
-          , so {tbaCount + outside === 1 ? "it isn't" : "they aren't"} on the timeline. See them in List.
-        </p>
-      )}
     </div>
   );
 }
