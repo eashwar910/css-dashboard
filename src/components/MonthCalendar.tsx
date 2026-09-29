@@ -191,10 +191,18 @@ export function MonthCalendar<T extends CalendarItem>({ items, isLoading, onSele
 }
 
 /** List / Calendar switch shown in the Events and Meetings headers. */
-export function ViewModeToggle({ mode, onChange }: { mode: 'list' | 'calendar'; onChange: (mode: 'list' | 'calendar') => void }) {
+export function ViewModeToggle<M extends string = 'list' | 'calendar'>({
+  mode,
+  onChange,
+  modes = ['list', 'calendar'] as unknown as readonly M[],
+}: {
+  mode: M;
+  onChange: (mode: M) => void;
+  modes?: readonly M[];
+}) {
   return (
     <div className="flex border border-border" role="group" aria-label="View">
-      {(['list', 'calendar'] as const).map((m) => (
+      {modes.map((m) => (
         <button
           key={m}
           type="button"

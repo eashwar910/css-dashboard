@@ -55,6 +55,7 @@ import { EpfPanel } from '@/components/EpfPanel';
 import { DetailFacts } from '@/components/DetailFacts';
 import { PageBody } from '@/components/PageBody';
 import { MonthCalendar, ViewModeToggle } from '@/components/MonthCalendar';
+import { EventTimeline } from '@/components/EventTimeline';
 import { EventWhenFields } from '@/components/EventWhenFields';
 import { buildTimeline, whenFromEvent, type WhenValue } from '@/lib/eventWhen';
 import { useEpfs } from '@/hooks/useEpfs';
@@ -138,7 +139,7 @@ function downloadIcsFile(event: Event) {
 
 /** Society events from Notion: a chronological list (TBA last) or a month calendar. */
 export function EventsView() {
-  const [mode, setMode] = useState<'list' | 'calendar'>('list');
+  const [mode, setMode] = useState<'list' | 'calendar' | 'timeline'>('list');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [rsvpedEventIds, setRsvpedEventIds] = useState<Set<string>>(new Set());
@@ -184,12 +185,12 @@ export function EventsView() {
           <div>
             <h1 className="font-serif text-3xl font-semibold leading-tight sm:text-4xl">Events</h1>
             <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-              Every society event, in date order. Switch to Calendar for a month view.
+              Every society event, in date order. Switch to Calendar for a month view, or Timeline for the whole year.
             </p>
           </div>
 
           <div className="flex items-center gap-3">
-            <ViewModeToggle mode={mode} onChange={setMode} />
+            <ViewModeToggle mode={mode} onChange={setMode} modes={['list', 'calendar', 'timeline'] as const} />
             <button
               onClick={() => setDialogOpen(true)}
               style={{ borderRadius: 0 }}
@@ -210,7 +211,17 @@ export function EventsView() {
         </div>
       )}
 
-      {mode === 'calendar' ? (
+      {mode === 'timeline' ? (
+        /* ── Year timeline (Sep 15 2026 – May 31 2027) ── */
+        <section>
+          <EventTimeline
+            events={allEvents}
+            isLoading={isLoading}
+            onSelect={setSelectedEvent}
+            hasEpf={(id) => !!epfsByEvent[id]}
+          />
+        </section>
+      ) : mode === 'calendar' ? (
         /* ── Month calendar (events only; TBA events can't be placed) ── */
         <section className="space-y-3">
           <MonthCalendar
