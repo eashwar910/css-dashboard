@@ -2,6 +2,7 @@ import { useEffect, useMemo, useSyncExternalStore, useCallback } from 'react';
 import type { AsyncResult, Task, TaskInput, TaskStatus } from '@/lib/types';
 import { createApiStore } from '@/lib/apiStore';
 import { apiFetch } from '@/lib/api';
+import { compareMembers } from '@/lib/memberOrder';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // useTasks
@@ -164,8 +165,8 @@ export interface PersonGroup {
 }
 
 /**
- * One group per PIC person (a task with several PICs appears under each).
- * The signed-in member's group comes first; the rest are alphabetical.
+ * One group per PIC person (a task with several PICs appears under each),
+ * in lib/memberOrder's order; anyone not listed there follows alphabetically.
  * Weekly to-dos are individual only, so tasks with no PIC person never get here.
  */
 function groupByPerson(tasks: Task[], myUserId: string | null): PersonGroup[] {
@@ -178,7 +179,7 @@ function groupByPerson(tasks: Task[], myUserId: string | null): PersonGroup[] {
     }
   }
   const byName = (a: PersonGroup, b: PersonGroup) => a.name.localeCompare(b.name);
-  return [...people.values()].sort((a, b) => Number(b.isMe) - Number(a.isMe) || byName(a, b));
+  return [...people.values()].sort((a, b) => compareMembers(a.name, b.name) || byName(a, b));
 }
 
 export interface TasksResult extends AsyncResult<Task[]> {
@@ -194,9 +195,9 @@ export interface TasksResult extends AsyncResult<Task[]> {
   thisWeek: Task[];
   /** Everyone's individual to-dos planned for last week, Done or not. */
   lastWeek: Task[];
-  /** thisWeek grouped by person (you first). */
+  /** thisWeek grouped by person. */
   thisWeekGroups: PersonGroup[];
-  /** lastWeek grouped by person (you first). */
+  /** lastWeek grouped by person. */
   lastWeekGroups: PersonGroup[];
   /** Monday 00:00 (Kuala Lumpur) of this week and last week, as ISO instants. */
   weekStart: string | null;

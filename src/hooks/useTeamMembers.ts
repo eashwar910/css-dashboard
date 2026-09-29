@@ -1,11 +1,13 @@
 import { useMemo } from 'react';
 import type { AsyncResult, TeamMember } from '@/lib/types';
 import { useApiResource } from '@/hooks/useApiResource';
+import { compareMembers } from '@/lib/memberOrder';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // useTeamMembers
 //
-// Returns all ExCo members from GET /api/team plus grouping helpers.
+// Returns all ExCo members from GET /api/team (in lib/memberOrder's order)
+// plus grouping helpers.
 // year, email and avatarUrl are optional: members without a year are left
 // out of byYear but still appear in `data`.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,7 +51,8 @@ export function useTeamMembers(): TeamMembersResult {
         year: m.year ?? undefined,
         email: m.email ?? undefined,
         avatarUrl: m.avatarUrl ?? undefined,
-      })),
+      }))
+        .sort((a, b) => compareMembers(a.name, b.name)),
     [response]
   );
 
