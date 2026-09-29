@@ -44,14 +44,15 @@ import {
   Plus,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import type { Event } from '@/lib/types';
+import type { Event, Meeting } from '@/lib/types';
 import type { View } from '@/components/Navbar';
 import { EVENT_FEATURES } from '@/lib/features';
 import { TbaTag } from '@/components/TbaTag';
 import { AddDocumentDialog } from '@/components/AddDocumentDialog';
-import { formatEventDate, formatEventTimeRange, isTba } from '@/lib/eventDates';
+import { eventStart, formatEventDate, formatEventTimeRange, isTba } from '@/lib/eventDates';
 
 import { useEvents } from '@/hooks/useEvents';
+import { useMeetings } from '@/hooks/useMeetings';
 import { useDocuments } from '@/hooks/useDocuments';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 
@@ -78,12 +79,16 @@ const PINNED_LINKS = [
   },
 ];
 
+/** One row of Upcoming Schedule: an event or a meeting. */
+type ScheduleItem = { kind: 'event'; item: Event } | { kind: 'meeting'; item: Meeting };
+
 export interface HomeViewProps {
   onNavigate?: (view: View) => void;
 }
 
 export function HomeView({ onNavigate }: HomeViewProps = {}) {
   const { upcoming: upcomingEvents, tba: tbaEvents, data: allEvents, isLoading: eventsLoading, error: eventsError, deleteEvent, canDelete } = useEvents();
+  const { upcoming: upcomingMeetings, isLoading: meetingsLoading, error: meetingsError } = useMeetings();
   const { data: documents, byCategory: docsByCategory, isLoading: docsLoading, error: docsError, addDocument } = useDocuments();
   const [addDocOpen, setAddDocOpen] = useState(false);
   const { data: teamMembers } = useTeamMembers();
@@ -103,6 +108,19 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
     () => [...upcomingEvents, ...tbaEvents.filter((e) => e.status !== 'done')],
     [upcomingEvents, tbaEvents]
   );
+
+  // Upcoming Schedule: events and meetings together, soonest first; TBA ones
+  // last (events before meetings, each in its own order).
+  const schedule = useMemo<ScheduleItem[]>(() => {
+    const items: ScheduleItem[] = [
+      ...sortedUpcomingEvents.map((item) => ({ kind: 'event' as const, item })),
+      ...upcomingMeetings.map((item) => ({ kind: 'meeting' as const, item })),
+    ];
+    const dated = items.filter((s) => !isTba(s.item));
+    dated.sort((a, b) => (eventStart(a.item)?.getTime() ?? 0) - (eventStart(b.item)?.getTime() ?? 0));
+    return [...dated, ...items.filter((s) => isTba(s.item))];
+  }, [sortedUpcomingEvents, upcomingMeetings]);
+  const scheduleLoading = eventsLoading || meetingsLoading;
 
   // Search filtering across events, documents, and members
   const searchResults = useMemo(() => {
@@ -363,16 +381,16 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
       {/* ── Main grid ───────────────────────────────────────────────── */}
       <div>
 
-        {/* ── Upcoming Events / Event Pinboard ─────────────────────── */}
+        {/* ── Upcoming Schedule: events and meetings ────────────────── */}
         <section>
           <div className="mb-4 flex items-baseline justify-between border-b border-border pb-2">
-            <h2 className="font-serif text-lg font-semibold">Upcoming Events</h2>
+            <h2 className="font-serif text-lg font-semibold">Upcoming Schedule</h2>
             <span className="text-xs text-muted-foreground">
-              {eventsLoading ? 'Loading...' : `${sortedUpcomingEvents.length} upcoming`}
+              {scheduleLoading ? 'Loading...' : `${schedule.length} upcoming`}
             </span>
           </div>
 
-          {eventsLoading ? (
+          {scheduleLoading ? (
             <div className="divide-y divide-border">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="py-4 space-y-2">
@@ -382,92 +400,114 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
                 </div>
               ))}
             </div>
-          ) : eventsError ? (
+          ) : eventsError && meetingsError ? (
             <div className="flex items-center gap-2 py-6 text-xs text-destructive">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>Couldn't load upcoming events — try refreshing.</span>
+              <span>Couldn't load the schedule — try refreshing.</span>
             </div>
-          ) : sortedUpcomingEvents.length === 0 ? (
-            <p className="py-6 text-xs text-muted-foreground">
-              No upcoming events scheduled yet.
-            </p>
           ) : (
-            <div className="divide-y divide-border">
-              {sortedUpcomingEvents.map((event, index) => {
-                const tba = isTba(event);
-                const isSoonest = index === 0 && !tba;
+            <>
+              {(eventsError || meetingsError) && (
+                <div className="flex items-center gap-2 pb-2 text-xs text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>Couldn't load {eventsError ? 'events' : 'meetings'} — try refreshing.</span>
+                </div>
+              )}
+              {schedule.length === 0 ? (
+                <p className="py-6 text-xs text-muted-foreground">
+                  Nothing scheduled yet.
+                </p>
+              ) : (
+                <div className="divide-y divide-border">
+                  {schedule.map((entry, index) => {
+                    const { kind, item } = entry;
+                    const tba = isTba(item);
+                    const isSoonest = index === 0 && !tba;
+                    const open = () => (entry.kind === 'event' ? handleEventClick(entry.item) : onNavigate?.('meetings'));
 
-                return (
-                  <article
-                    key={event.id}
-                    onClick={() => handleEventClick(event)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        handleEventClick(event);
-                      }
-                    }}
-                    className={cn(
-                      'group block cursor-pointer py-4 text-left transition-colors',
-                      isSoonest && 'border-l-2 border-primary pl-3.5 -ml-3.5 bg-muted/20 pr-3'
-                    )}
-                  >
-                    <div className="mb-1 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {tba ? (
-                          <TbaTag />
-                        ) : (
-                          <p className="text-xs text-muted-foreground">
-                            {formatEventDate(event, 'EEEE, MMMM d')}
-                          </p>
+                    return (
+                      <article
+                        key={`${kind}-${item.id}`}
+                        onClick={open}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            open();
+                          }
+                        }}
+                        className={cn(
+                          'group block cursor-pointer py-4 text-left transition-colors',
+                          isSoonest && 'border-l-2 border-primary pl-3.5 -ml-3.5 bg-muted/20 pr-3'
                         )}
-                        {isSoonest && (
-                          <span className="border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
-                            Soonest
+                      >
+                        <div className="mb-1 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {tba ? (
+                              <TbaTag />
+                            ) : (
+                              <p className="text-xs text-muted-foreground">
+                                {formatEventDate(item, 'EEEE, MMMM d')}
+                              </p>
+                            )}
+                            <span
+                              className={cn(
+                                'border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider',
+                                kind === 'event'
+                                  ? 'border-border text-muted-foreground'
+                                  : 'border-sky-500/40 text-sky-600 dark:text-sky-400'
+                              )}
+                            >
+                              {kind === 'event' ? 'Event' : entry.item.type ?? 'Meeting'}
+                            </span>
+                            {isSoonest && (
+                              <span className="border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
+                                Soonest
+                              </span>
+                            )}
+                          </div>
+                          {entry.kind === 'event' && canDelete && (
+                            <button
+                              type="button"
+                              title="Delete event"
+                              aria-label={`Delete event ${item.title}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEventToDelete(entry.item);
+                              }}
+                              className="p-1 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                        <h3 className="font-serif text-base font-semibold leading-snug text-foreground transition-colors group-hover:text-primary">
+                          {item.title}
+                        </h3>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                          {!tba && (
+                            <span className="flex items-center gap-1.5">
+                              <Clock className="h-3 w-3 shrink-0" />
+                              {formatEventTimeRange(item)}
+                            </span>
+                          )}
+                          <span className="flex items-center gap-1.5">
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            {item.location || 'Location TBA'}
                           </span>
-                        )}
-                      </div>
-                      {canDelete && (
-                        <button
-                          type="button"
-                          title="Delete event"
-                          aria-label={`Delete event ${event.title}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEventToDelete(event);
-                          }}
-                          className="p-1 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all hover:text-destructive hover:bg-destructive/10"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                    <h3 className="font-serif text-base font-semibold leading-snug text-foreground transition-colors group-hover:text-primary">
-                      {event.title}
-                    </h3>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                      {!tba && (
-                        <span className="flex items-center gap-1.5">
-                          <Clock className="h-3 w-3 shrink-0" />
-                          {formatEventTimeRange(event)}
-                        </span>
-                      )}
-                      <span className="flex items-center gap-1.5">
-                        <MapPin className="h-3 w-3 shrink-0" />
-                        {event.location || 'Location TBA'}
-                      </span>
-                      {EVENT_FEATURES.rsvp && event.rsvpCount > 0 && (
-                        <span>
-                          {event.rsvpCount} RSVPs
-                        </span>
-                      )}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+                          {entry.kind === 'event' && EVENT_FEATURES.rsvp && entry.item.rsvpCount > 0 && (
+                            <span>
+                              {entry.item.rsvpCount} RSVPs
+                            </span>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </section>
       </div>
