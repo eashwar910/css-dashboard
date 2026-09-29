@@ -31,12 +31,12 @@ export interface TaskDto {
   week: string | null;
   /** Individual PIC people, for grouping the Weekly tab by person. */
   assignees: { id: string; name: string }[];
-  /** In the Weekly tab's "This week": planned this week, or still open from an earlier week (or no week). */
+  /** When the page was created in Notion: the "date added" for to-dos with no due date. */
+  createdTime: string;
+  /** In the Weekly tab's "This week": due (or added) this week or later. */
   thisWeek: boolean;
-  /** Open, and planned for an earlier week. */
-  carriedOver: boolean;
-  /** In the Weekly tab's "Last week": planned for last week (Done or not). */
-  lastWeek: boolean;
+  /** In the Weekly tab's "Overdue": open and due (or added) before this week, or Done and from the two weeks before. */
+  overdue: boolean;
   /** What the signed-in member may do (ownership.ts). The server re-checks on every write. */
   can: { toggle: boolean; edit: boolean; delete: boolean };
 }
@@ -74,6 +74,12 @@ export function klMonday(at: Date): string {
   const kl = new Date(at.getTime() + KL_OFFSET_MS);
   const monday = Date.UTC(kl.getUTCFullYear(), kl.getUTCMonth(), kl.getUTCDate()) - ((kl.getUTCDay() + 6) % 7) * DAY_MS;
   return new Date(monday).toISOString().slice(0, 10);
+}
+
+/** Kuala Lumpur calendar day (YYYY-MM-DD) of an ISO date or datetime. Date-only values are taken as written. */
+function klDay(value: string): string {
+  if (value.length <= 10) return value;
+  return new Date(Date.parse(value) + KL_OFFSET_MS).toISOString().slice(0, 10);
 }
 
 /** Monday of the week a Notion `Week` value falls in (anyone may pick a non-Monday in Notion). */
@@ -114,15 +120,18 @@ export function toTask(
   const mine = isMine(page, member);
   const shared = sharedWith(page);
   const thisMonday = klMonday(week.start);
-  const lastMonday = klMonday(new Date(week.start.getTime() - 7 * DAY_MS));
+  const twoWeeksAgo = klMonday(new Date(week.start.getTime() - 14 * DAY_MS));
   const taskWeek = weekOf(date(page, 'Week')?.start);
   const open = taskStatus !== 'done';
-  const carriedOver = open && taskWeek !== null && taskWeek < thisMonday;
+  const dueDate = date(page, 'Due Date')?.start ?? null;
+  // The due date decides the column; with none, the day it was added does.
+  const day = klDay(dueDate ?? page.created_time);
+  const past = day < thisMonday;
   return {
     id: page.id,
     title: title(page, 'Task') ?? 'Untitled task',
     status: taskStatus,
-    dueDate: date(page, 'Due Date')?.start ?? null,
+    dueDate,
     eventIds,
     eventName: eventIds.map((id) => eventNames.get(id)).find((n): n is string => !!n) ?? null,
     lastEditedTime: page.last_edited_time,
@@ -133,9 +142,9 @@ export function toTask(
     assignees: people(page, 'PIC')
       .filter((p) => p.kind === 'person' || p.kind === 'unknown')
       .map((p) => ({ id: p.id, name: p.name ?? 'Former member' })),
-    thisWeek: taskWeek === thisMonday || (open && (taskWeek === null || taskWeek < thisMonday)),
-    carriedOver,
-    lastWeek: taskWeek === lastMonday,
+    createdTime: page.created_time,
+    thisWeek: !past,
+    overdue: past && (open || day >= twoWeeksAgo),
     can: {
       toggle: canModifyTask(member, page, 'toggle').allowed,
       edit: canModifyTask(member, page, 'edit').allowed,
@@ -144,12 +153,12 @@ export function toTask(
   };
 }
 
-/** Due date ascending (undated last), then title. */
+/** Due date ascending; undated ones after, oldest added first; then title. */
 function compareTasks(a: TaskDto, b: TaskDto): number {
   if (a.dueDate && b.dueDate) return Date.parse(a.dueDate) - Date.parse(b.dueDate) || a.title.localeCompare(b.title);
   if (a.dueDate) return -1;
   if (b.dueDate) return 1;
-  return a.title.localeCompare(b.title);
+  return Date.parse(a.createdTime) - Date.parse(b.createdTime) || a.title.localeCompare(b.title);
 }
 
 export async function taskPages(): Promise<PageObjectResponse[]> {
@@ -171,6 +180,5 @@ export async function loadTasks(member: TaskViewer, now = new Date()) {
     tasks: pages.map((p) => toTask(p, member, eventNames, week)).sort(compareTasks),
     weekStart: week.start.toISOString(),
     weekEnd: week.end.toISOString(),
-    lastWeekStart: new Date(week.start.getTime() - 7 * DAY_MS).toISOString(),
   };
 }

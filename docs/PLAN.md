@@ -68,10 +68,12 @@ Restructured 2026-09-29 after the President's review (`scripts/restructure-meeti
 ## Tasks and the Weekly tab
 - Weekly to-dos are rows in Tasks. `PIC` (people) is the owner of each to-do. `Events` (relation) links it to an event. `Week` (date) is the Monday of the week it was planned for.
 - The Weekly tab shows **everyone's** to-dos, grouped by PIC person (a task with several PICs appears under each; the signed-in member first), then "Everyone" (tasks whose only PIC is Notion's Everyone group), then "Unassigned". **To-dos are individual: there is no grouping by department.** A department group as PIC is ignored (the task shows as Unassigned until a person is named).
-  - **This week**: `Week` is this week, plus anything still open from an earlier week (marked "From an earlier week") or with no `Week`.
-  - **Last week**: `Week` is last week, Done or not.
+  - Each to-do's date is its `Due Date`, or, with none, the day the page was created (the day it was added).
+  - **This week**: that date is this week or later (Done or not). A to-do due next month stays here until its due date is in the past.
+  - **Overdue**: that date is before this week and it's still open; or it's Done and the date is in the two weeks before this week. Older Done to-dos are hidden.
+  - Order: to-dos with a due date first, soonest first; then undated ones, oldest added first.
   - Weeks are Asia/Kuala_Lumpur, starting Monday.
-- A task created from the dashboard gets `Week` = this week. Ticking a task with no `Week` sets it to this week.
+- `Week` no longer decides the column. A task created from the dashboard still gets `Week` = this week, and ticking a task with no `Week` sets it to this week.
 - Ticking a task sets Status to Done. Unticking sets it back to Not started.
 - Event detail to-dos are the Tasks linked to that event.
 - A to-do created from the dashboard gets PIC = the creator, and links to the event if it was created from one. The creator's Notion user id is looked up by email via `notion.users.list`, cached.

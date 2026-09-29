@@ -36,12 +36,12 @@ export interface Task {
   week?: string;
   /** Individual PIC people; the Weekly tab groups by these. */
   assignees: { id: string; name: string }[];
-  /** In the Weekly tab's "This week" (planned this week, or still open). */
+  /** When it was added (Notion page creation time); orders to-dos with no due date. */
+  createdTime: string;
+  /** In the Weekly tab's "This week": due (or added) this week or later. */
   thisWeek: boolean;
-  /** Open and planned for an earlier week. */
-  carriedOver: boolean;
-  /** In the Weekly tab's "Last week" (planned for last week, Done or not). */
-  lastWeek: boolean;
+  /** In the Weekly tab's "Overdue": open and due (or added) before this week, or Done from the two weeks before. */
+  overdue: boolean;
   /** What the signed-in member may do. The server re-checks every write. */
   can: { toggle: boolean; edit: boolean; delete: boolean };
   /** A tick/untick is being saved; `completed` shows the value being saved. */

@@ -8,7 +8,7 @@ import { compareMembers } from '@/lib/memberOrder';
 // useTasks
 //
 // Every task from /api/tasks (Notion Team Dashboard > Tasks), shared across
-// views, plus everyone's weekly to-dos (this week and last) and per-event
+// views, plus everyone's weekly to-dos (this week and overdue) and per-event
 // lists. Writes go to the API; toggle and delete update optimistically and
 // roll back on error.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -25,9 +25,9 @@ export interface TaskDto {
   sharedWith: string | null;
   week: string | null;
   assignees: { id: string; name: string }[];
+  createdTime: string;
   thisWeek: boolean;
-  carriedOver: boolean;
-  lastWeek: boolean;
+  overdue: boolean;
   can: { toggle: boolean; edit: boolean; delete: boolean };
 }
 
@@ -35,7 +35,6 @@ interface TasksResponse {
   tasks: TaskDto[];
   weekStart: string;
   weekEnd: string;
-  lastWeekStart: string;
   notionLinked: boolean;
   notionUserId: string | null;
 }
@@ -54,9 +53,9 @@ function toTask(t: TaskDto): Task {
     sharedWith: t.sharedWith ?? undefined,
     week: t.week ?? undefined,
     assignees: t.assignees,
+    createdTime: t.createdTime,
     thisWeek: t.thisWeek,
-    carriedOver: t.carriedOver,
-    lastWeek: t.lastWeek,
+    overdue: t.overdue,
     can: t.can,
   };
 }
@@ -65,7 +64,6 @@ interface TasksValue {
   tasks: Task[];
   weekStart: string | null;
   weekEnd: string | null;
-  lastWeekStart: string | null;
   notionLinked: boolean;
   notionUserId: string | null;
 }
@@ -76,11 +74,10 @@ const store = createApiStore<TasksResponse, TasksValue>(
     tasks: res.tasks.map(toTask),
     weekStart: res.weekStart,
     weekEnd: res.weekEnd,
-    lastWeekStart: res.lastWeekStart,
     notionLinked: res.notionLinked,
     notionUserId: res.notionUserId,
   }),
-  { tasks: [], weekStart: null, weekEnd: null, lastWeekStart: null, notionLinked: true, notionUserId: null }
+  { tasks: [], weekStart: null, weekEnd: null, notionLinked: true, notionUserId: null }
 );
 
 // ── Writes (module-level so every view shares them) ──────────────────────────
@@ -206,6 +203,14 @@ function groupByPerson(tasks: Task[], myUserId: string | null): PersonGroup[] {
   return [...people.values()].sort((a, b) => compareMembers(a.name, b.name) || byName(a, b));
 }
 
+/** Due date first, soonest first; undated after, oldest added first. Same order as the API. */
+function compareWeekly(a: Task, b: Task): number {
+  if (a.dueDate && b.dueDate) return Date.parse(a.dueDate) - Date.parse(b.dueDate) || a.title.localeCompare(b.title);
+  if (a.dueDate) return -1;
+  if (b.dueDate) return 1;
+  return Date.parse(a.createdTime) - Date.parse(b.createdTime) || a.title.localeCompare(b.title);
+}
+
 export interface TasksResult extends AsyncResult<Task[]> {
   /** Tasks grouped by their `project` (linked event name); unlinked tasks under "General". */
   byProject: Record<string, Task[]>;
@@ -215,17 +220,16 @@ export interface TasksResult extends AsyncResult<Task[]> {
   completedCount: number;
   /** Total task count. */
   totalCount: number;
-  /** Everyone's individual to-dos for this week (planned this week, or still open). */
+  /** Everyone's individual to-dos due (or added) this week or later. */
   thisWeek: Task[];
-  /** Everyone's individual to-dos planned for last week, Done or not. */
-  lastWeek: Task[];
+  /** Everyone's individual to-dos due (or added) before this week: open ones, and Done ones from the two weeks before. */
+  overdue: Task[];
   /** thisWeek grouped by person. */
   thisWeekGroups: PersonGroup[];
-  /** lastWeek grouped by person. */
-  lastWeekGroups: PersonGroup[];
-  /** Monday 00:00 (Kuala Lumpur) of this week and last week, as ISO instants. */
+  /** overdue grouped by person. */
+  overdueGroups: PersonGroup[];
+  /** Monday 00:00 (Kuala Lumpur) of this week, as an ISO instant. */
   weekStart: string | null;
-  lastWeekStart: string | null;
   /** False when no Notion user matches the member's email (see committee_members.notion_email). */
   notionLinked: boolean;
   /** All tasks linked to an event (the event detail to-do list). */
@@ -272,10 +276,11 @@ export function useTasks(): TasksResult {
   const completedCount = useMemo(() => data.filter((t) => t.completed).length, [data]);
 
   // Weekly is individual to-dos only: tasks for "Everyone" or nobody are left out.
-  const thisWeek = useMemo(() => data.filter((t) => t.thisWeek && t.assignees.length > 0), [data]);
-  const lastWeek = useMemo(() => data.filter((t) => t.lastWeek && t.assignees.length > 0), [data]);
+  // Sorted here too, so tasks just added or edited land in place without a reload.
+  const thisWeek = useMemo(() => data.filter((t) => t.thisWeek && t.assignees.length > 0).sort(compareWeekly), [data]);
+  const overdue = useMemo(() => data.filter((t) => t.overdue && t.assignees.length > 0).sort(compareWeekly), [data]);
   const thisWeekGroups = useMemo(() => groupByPerson(thisWeek, value.notionUserId), [thisWeek, value.notionUserId]);
-  const lastWeekGroups = useMemo(() => groupByPerson(lastWeek, value.notionUserId), [lastWeek, value.notionUserId]);
+  const overdueGroups = useMemo(() => groupByPerson(overdue, value.notionUserId), [overdue, value.notionUserId]);
 
   const forEvent = useCallback((eventId: string) => data.filter((t) => t.eventIds.includes(eventId)), [data]);
 
@@ -288,11 +293,10 @@ export function useTasks(): TasksResult {
     completedCount,
     totalCount: data.length,
     thisWeek,
-    lastWeek,
+    overdue,
     thisWeekGroups,
-    lastWeekGroups,
+    overdueGroups,
     weekStart: value.weekStart,
-    lastWeekStart: value.lastWeekStart,
     notionLinked: value.notionLinked,
     forEvent,
     toggleTask,

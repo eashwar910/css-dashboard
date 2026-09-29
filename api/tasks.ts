@@ -1,5 +1,5 @@
 // /api/tasks
-//   GET                    every task, flagged mine/shared and thisWeek/lastWeek, with `can` permissions
+//   GET                    every task, flagged mine/shared and thisWeek/overdue, with `can` permissions
 //   POST                   create { title, dueDate?, status?, eventId? } → { task, warning }
 //   PATCH  ?id=<page id>   tick/untick { completed } or edit { title?, dueDate?, status?, eventId? } → { task }
 //   DELETE ?id=<page id>   move to Notion trash → { ok: true }

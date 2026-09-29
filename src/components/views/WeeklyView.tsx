@@ -28,6 +28,12 @@ function weekRange(startIso: string | null) {
   return `${format(start, 'MMM d')} – ${format(end, 'MMM d')}`;
 }
 
+/** "Before Sep 28" for the week starting at this ISO instant. */
+function beforeWeek(startIso: string | null) {
+  const start = parseDate(startIso);
+  return start ? `Before ${format(start, 'MMM d')}` : '';
+}
+
 function TaskRow({ task, onToggle, onEdit }: { task: Task; onToggle: (id: string) => void; onEdit: (task: Task) => void }) {
   const due = formatDueDate(task.dueDate);
   return (
@@ -69,11 +75,6 @@ function TaskRow({ task, onToggle, onEdit }: { task: Task; onToggle: (id: string
                 <span className="text-muted-foreground/60">·</span>
                 <span>{task.project}</span>
               </>
-            )}
-            {task.carriedOver && (
-              <span className="border border-amber-500/40 px-1 text-[10px] uppercase tracking-wider text-amber-600">
-                From an earlier week
-              </span>
             )}
           </p>
         </div>
@@ -123,14 +124,14 @@ interface PersonRow {
   overdue: Task[];
 }
 
-function personRows(thisWeekGroups: PersonGroup[], lastWeekGroups: PersonGroup[]): PersonRow[] {
+function personRows(thisWeekGroups: PersonGroup[], overdueGroups: PersonGroup[]): PersonRow[] {
   const rows = new Map<string, PersonRow>();
-  const order = [...thisWeekGroups, ...lastWeekGroups].sort((a, b) => compareMembers(a.name, b.name) || a.name.localeCompare(b.name));
+  const order = [...thisWeekGroups, ...overdueGroups].sort((a, b) => compareMembers(a.name, b.name) || a.name.localeCompare(b.name));
   for (const g of order) {
     if (!rows.has(g.key)) rows.set(g.key, { key: g.key, name: g.name, isMe: g.isMe, thisWeek: [], overdue: [] });
   }
   for (const g of thisWeekGroups) rows.get(g.key)!.thisWeek = g.tasks;
-  for (const g of lastWeekGroups) rows.get(g.key)!.overdue = g.tasks;
+  for (const g of overdueGroups) rows.get(g.key)!.overdue = g.tasks;
   return [...rows.values()];
 }
 
@@ -203,11 +204,10 @@ function GroupsSkeleton() {
 export function WeeklyView() {
   const {
     thisWeek,
-    lastWeek,
+    overdue,
     thisWeekGroups,
-    lastWeekGroups,
+    overdueGroups,
     weekStart,
-    lastWeekStart,
     notionLinked,
     toggleTask,
     createTask,
@@ -247,7 +247,7 @@ export function WeeklyView() {
       <header className="border-b border-border pb-6">
         <h1 className="font-serif text-3xl font-semibold leading-tight sm:text-4xl">Weekly</h1>
         <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-          Everyone's to-dos for this week and overdue ones from last week, by person, saved to Notion.
+          Everyone's to-dos by person: due this week or later on the left, overdue on the right. A to-do with no due date counts from the day it was added. Saved to Notion.
           {!isLoading && !notionLinked && (
             <span className="mt-1 block text-destructive">
               Your login email doesn't match a Notion account, so none of these are marked as yours. Ask an admin to set your Notion email.
@@ -275,10 +275,10 @@ export function WeeklyView() {
             </div>
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="font-serif text-2xl font-semibold">
-                Overdue <span className="ml-1 text-sm font-normal text-muted-foreground">{weekRange(lastWeekStart)}</span>
+                Overdue <span className="ml-1 text-sm font-normal text-muted-foreground">{beforeWeek(weekStart)}</span>
               </h2>
               <span className="text-sm text-muted-foreground">
-                {isLoading ? 'Loading...' : `${doneCount(lastWeek)} of ${lastWeek.length} done`}
+                {isLoading ? 'Loading...' : `${doneCount(overdue)} of ${overdue.length} done`}
               </span>
             </div>
           </div>
@@ -286,7 +286,7 @@ export function WeeklyView() {
           {isLoading ? (
             <GroupsSkeleton />
           ) : (
-            <PersonBoxes rows={personRows(thisWeekGroups, lastWeekGroups)} onToggle={handleToggleTask} onEdit={setEditingTask} />
+            <PersonBoxes rows={personRows(thisWeekGroups, overdueGroups)} onToggle={handleToggleTask} onEdit={setEditingTask} />
           )}
 
           {/* Add a task for yourself (this week, no event) */}
