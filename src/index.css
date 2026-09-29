@@ -57,6 +57,8 @@
 
   /* ── Editorial Dark ──────────────────────────────────────────────── */
   .dark {
+    /* Native controls (date/time picker icons, scrollbars) draw light on dark */
+    color-scheme: dark;
     /* #161513 */
     --background: 38 8% 9%;
     /* #EDEAE0 */

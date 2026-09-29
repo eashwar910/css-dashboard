@@ -65,8 +65,8 @@ import { eventEnd, eventStart, formatEventDate, formatEventTimeRange, isTba } fr
 /** Calendar chip colours, keyed by event progression status. */
 const STATUS_CHIP_CLASSES: Record<EventStatus, string> = {
   'scheduled': 'border-primary/20 bg-primary/10 text-primary hover:bg-primary/20',
-  'planning-in-progress': 'border-amber-500/30 bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 dark:border-amber-400/40 dark:text-amber-400',
-  'done': 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 dark:border-emerald-400/40 dark:text-emerald-400',
+  'planning-in-progress': 'border-amber-500/30 bg-amber-500/10 text-amber-600 hover:bg-amber-500/20',
+  'done': 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20',
 };
 
 const STATUS_LABELS: Record<EventStatus, string> = {
