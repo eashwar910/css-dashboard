@@ -5,19 +5,19 @@ import { useApiResource } from '@/hooks/useApiResource';
 // ─────────────────────────────────────────────────────────────────────────────
 // useExternalRelations
 //
-// Sponsors and partners from GET /api/external-relations (Notion: Team
-// Dashboard > External Relations). save() creates or edits a row in Notion
-// and re-fetches the list.
+// Sponsors, partners and speakers from GET /api/external-relations (Notion: Team
+// Dashboard > External Relations). save() creates or edits a row in Notion,
+// remove() moves one to Notion's trash; both re-fetch the list.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type RelationType = 'sponsor' | 'partner';
+export type RelationType = 'sponsor' | 'partner' | 'speaker';
 
 export interface ExternalRelation {
   id: string;
   name: string;
   /** null when Type of Relation isn't set in Notion yet. */
   type: RelationType | null;
-  /** Partners: what they give the society, e.g. AI credits. */
+  /** Partners: what they give the society, e.g. AI credits. Speakers: talk details. */
   valueProvided: string | null;
   bountyUsdt: number | null;
   opsMyr: number | null;
@@ -38,6 +38,7 @@ export function useExternalRelations() {
 
   const sponsors = useMemo(() => relations.filter((r) => r.type === 'sponsor'), [relations]);
   const partners = useMemo(() => relations.filter((r) => r.type === 'partner'), [relations]);
+  const speakers = useMemo(() => relations.filter((r) => r.type === 'speaker'), [relations]);
   const uncategorised = useMemo(() => relations.filter((r) => r.type === null), [relations]);
 
   /** Create when id is omitted, otherwise edit that row. */
@@ -52,5 +53,14 @@ export function useExternalRelations() {
     [reload]
   );
 
-  return { data: relations, sponsors, partners, uncategorised, isLoading, error, save };
+  /** Move a row to Notion's trash (restorable there for 30 days). */
+  const remove = useCallback(
+    async (id: string) => {
+      await apiFetch(`external-relations?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      reload();
+    },
+    [reload]
+  );
+
+  return { data: relations, sponsors, partners, speakers, uncategorised, isLoading, error, save, remove };
 }

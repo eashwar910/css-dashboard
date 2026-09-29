@@ -1,6 +1,17 @@
 import { useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertCircle, ExternalLink, Gift, Handshake, Pencil, Plus } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { AlertCircle, ExternalLink, Gift, Handshake, Mic, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import { formatRM } from '@/lib/money';
 import { useExternalRelations, type ExternalRelation } from '@/hooks/useExternalRelations';
 import { ExternalRelationDialog } from '@/components/ExternalRelationDialog';
@@ -34,7 +45,7 @@ function DocLink({ href, label }: { href: string | null; label: string }) {
   );
 }
 
-function RowActions({ relation, onEdit }: { relation: ExternalRelation; onEdit: () => void }) {
+function RowActions({ relation, onEdit, onDelete }: { relation: ExternalRelation; onEdit: () => void; onDelete: () => void }) {
   return (
     <div className="flex shrink-0 items-center gap-1">
       <a
@@ -56,18 +67,44 @@ function RowActions({ relation, onEdit }: { relation: ExternalRelation; onEdit: 
       >
         <Pencil className="h-3.5 w-3.5" />
       </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        title="Delete"
+        aria-label={`Delete ${relation.name}`}
+        className="p-1 text-muted-foreground transition-colors hover:text-destructive"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }
 
 export function ExternalRelationsView() {
-  const { sponsors, partners, uncategorised, isLoading, error, save } = useExternalRelations();
+  const { sponsors, partners, speakers, uncategorised, isLoading, error, save, remove } = useExternalRelations();
+  const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ExternalRelation | null>(null);
+  const [deleting, setDeleting] = useState<ExternalRelation | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
 
   const openAdd = () => {
     setEditing(null);
     setDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deleting) return;
+    setDeletePending(true);
+    try {
+      await remove(deleting.id);
+      toast({ title: 'Relation deleted', description: `"${deleting.name}" was moved to Notion's trash.` });
+      setDeleting(null);
+    } catch (err) {
+      toast({ title: "Couldn't delete", description: (err as Error).message, variant: 'destructive' });
+    } finally {
+      setDeletePending(false);
+    }
   };
   const openEdit = (relation: ExternalRelation) => {
     setEditing(relation);
@@ -92,7 +129,7 @@ export function ExternalRelationsView() {
           <div>
             <h1 className="font-serif text-3xl font-semibold leading-tight sm:text-4xl">External Relations</h1>
             <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-              Sponsors and partners, from the External Relations database in Notion.
+              Sponsors, partners and speakers, from the External Relations database in Notion.
             </p>
           </div>
           <button
@@ -145,7 +182,7 @@ export function ExternalRelationsView() {
                         <DocLink href={s.proofOfPaymentUrl} label="Proof of payment" />
                       </div>
                     </div>
-                    <RowActions relation={s} onEdit={() => openEdit(s)} />
+                    <RowActions relation={s} onEdit={() => openEdit(s)} onDelete={() => setDeleting(s)} />
                   </article>
                 ))}
               </div>
@@ -170,7 +207,32 @@ export function ExternalRelationsView() {
                         {p.valueProvided ?? 'Value provided not added yet.'}
                       </p>
                     </div>
-                    <RowActions relation={p} onEdit={() => openEdit(p)} />
+                    <RowActions relation={p} onEdit={() => openEdit(p)} onDelete={() => setDeleting(p)} />
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* ── Speakers ──────────────────────────────────────────────── */}
+          <section>
+            <SectionHeader title="Speakers" meta={isLoading ? 'Loading...' : `${speakers.length}`} />
+            {isLoading ? (
+              skeleton
+            ) : speakers.length === 0 ? (
+              <p className="py-4 text-xs text-muted-foreground">No speakers yet.</p>
+            ) : (
+              <div className="divide-y divide-border">
+                {speakers.map((sp) => (
+                  <article key={sp.id} className="flex items-start gap-4 py-4">
+                    <Mic className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-medium text-foreground">{sp.name}</h3>
+                      <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
+                        {sp.valueProvided ?? 'Talk details not added yet.'}
+                      </p>
+                    </div>
+                    <RowActions relation={sp} onEdit={() => openEdit(sp)} onDelete={() => setDeleting(sp)} />
                   </article>
                 ))}
               </div>
@@ -182,13 +244,13 @@ export function ExternalRelationsView() {
             <section>
               <SectionHeader title="Needs a type" meta={`${uncategorised.length}`} />
               <p className="mb-2 text-xs text-muted-foreground">
-                These rows have no Sponsor/Partner type in Notion. Edit one to choose.
+                These rows have no Sponsor/Partner/Speaker type in Notion. Edit one to choose.
               </p>
               <div className="divide-y divide-border">
                 {uncategorised.map((r) => (
                   <article key={r.id} className="flex items-center gap-4 py-3">
                     <span className="flex-1 text-sm">{r.name}</span>
-                    <RowActions relation={r} onEdit={() => openEdit(r)} />
+                    <RowActions relation={r} onEdit={() => openEdit(r)} onDelete={() => setDeleting(r)} />
                   </article>
                 ))}
               </div>
@@ -198,6 +260,34 @@ export function ExternalRelationsView() {
       )}
 
       <ExternalRelationDialog open={dialogOpen} onOpenChange={setDialogOpen} relation={editing} onSave={save} />
+
+      <AlertDialog open={deleting !== null} onOpenChange={(open) => !open && !deletePending && setDeleting(null)}>
+        <AlertDialogContent style={{ borderRadius: 0 }} className="border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-serif text-lg font-semibold">Delete relation</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs text-muted-foreground">
+              &ldquo;{deleting?.name}&rdquo; will be moved to Notion&apos;s trash. It can be restored from the trash in Notion for 30 days.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4 gap-2">
+            <AlertDialogCancel style={{ borderRadius: 0 }} disabled={deletePending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              style={{ borderRadius: 0 }}
+              disabled={deletePending}
+              onClick={(e) => {
+                // Keep the dialog open until Notion confirms
+                e.preventDefault();
+                void handleDelete();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletePending ? 'Deleting…' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

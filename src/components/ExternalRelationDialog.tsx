@@ -20,6 +20,8 @@ interface ExternalRelationDialogProps {
   onOpenChange: (open: boolean) => void;
   /** The row being edited, or null to add a new one. */
   relation: ExternalRelation | null;
+  /** Type preselected when adding. */
+  defaultType?: RelationType;
   onSave: (input: ExternalRelationInput, id?: string) => Promise<void>;
 }
 
@@ -28,8 +30,10 @@ function toAmount(value: string): number | null {
   return value.trim() === '' ? null : Number(value);
 }
 
-/** Add or edit a sponsor or partner in the Notion External Relations database. */
-export function ExternalRelationDialog({ open, onOpenChange, relation, onSave }: ExternalRelationDialogProps) {
+const TYPE_LABEL: Record<RelationType, string> = { sponsor: 'Sponsor', partner: 'Partner', speaker: 'Speaker' };
+
+/** Add or edit a sponsor, partner or speaker in the Notion External Relations database. */
+export function ExternalRelationDialog({ open, onOpenChange, relation, defaultType = 'sponsor', onSave }: ExternalRelationDialogProps) {
   const { toast } = useToast();
   const [type, setType] = useState<RelationType>('sponsor');
   const [name, setName] = useState('');
@@ -43,14 +47,14 @@ export function ExternalRelationDialog({ open, onOpenChange, relation, onSave }:
   // Load the row being edited (or blank fields) each time the dialog opens
   useEffect(() => {
     if (!open) return;
-    setType(relation?.type ?? 'sponsor');
+    setType(relation?.type ?? defaultType);
     setName(relation?.name ?? '');
     setValueProvided(relation?.valueProvided ?? '');
     setBountyUsdt(relation?.bountyUsdt?.toString() ?? '');
     setOpsMyr(relation?.opsMyr?.toString() ?? '');
     setSponsorshipFormUrl(relation?.sponsorshipFormUrl ?? '');
     setProofOfPaymentUrl(relation?.proofOfPaymentUrl ?? '');
-  }, [open, relation]);
+  }, [open, relation, defaultType]);
 
   const handleOpenChange = (next: boolean) => {
     if (!saving) onOpenChange(next);
@@ -106,7 +110,7 @@ export function ExternalRelationDialog({ open, onOpenChange, relation, onSave }:
           <div className="space-y-1.5">
             <p className="text-xs font-medium">Type</p>
             <div className="flex w-fit items-center border border-border">
-              {(['sponsor', 'partner'] as const).map((t) => (
+              {(['sponsor', 'partner', 'speaker'] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -125,7 +129,7 @@ export function ExternalRelationDialog({ open, onOpenChange, relation, onSave }:
 
           {field(
             'rel-name',
-            `${type === 'sponsor' ? 'Sponsor' : 'Partner'} name *`,
+            `${TYPE_LABEL[type]} name *`,
             <Input id="rel-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={200} style={{ borderRadius: 0 }} className="h-9 text-xs" required />
           )}
 
@@ -158,18 +162,24 @@ export function ExternalRelationDialog({ open, onOpenChange, relation, onSave }:
           ) : (
             field(
               'rel-value',
-              'Value provided',
+              type === 'speaker' ? 'Talk details' : 'Value provided',
               <Textarea
                 id="rel-value"
                 value={valueProvided}
                 onChange={(e) => setValueProvided(e.target.value)}
-                placeholder="e.g. $500 in AI credits for hackathon teams, venue for workshops"
+                placeholder={
+                  type === 'speaker'
+                    ? 'e.g. Talk on LLM agents at Tech Week; engineer at Grab; contact via LinkedIn'
+                    : 'e.g. $500 in AI credits for hackathon teams, venue for workshops'
+                }
                 maxLength={2000}
                 rows={4}
                 style={{ borderRadius: 0 }}
                 className="text-xs"
               />,
-              'What the partner gives the society. Any form: credits, services, venue, prizes…'
+              type === 'speaker'
+                ? 'Topic, event, organisation, contact: whatever the team needs to know.'
+                : 'What the partner gives the society. Any form: credits, services, venue, prizes…'
             )
           )}
 

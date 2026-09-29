@@ -1,14 +1,15 @@
-// Team Dashboard > External Relations → sponsors and partners.
-// `Type of Relation` is Sponsor or Partner. Sponsors use the money and
-// paperwork fields; partners use `Value Provided` (free text, e.g. AI credits).
-// Any committee member may add or edit a relation; rows have no owner.
+// Team Dashboard > External Relations → sponsors, partners and speakers.
+// `Type of Relation` is Sponsor, Partner or Speaker. Sponsors use the money and
+// paperwork fields; partners use `Value Provided` (free text, e.g. AI credits),
+// and speakers use it for their talk details (topic, organisation, contact).
+// Any committee member may add, edit or delete a relation; rows have no owner.
 
 import type { CreatePageParameters, PageObjectResponse } from '@notionhq/client';
 import { HttpError } from './http.js';
 import { cacheInvalidate, cached, dataSourceId, notion, queryAll, retrievePageIn } from './notion.js';
 import { number, richText, select, title, url, write } from './props.js';
 
-export type RelationTypeDto = 'sponsor' | 'partner';
+export type RelationTypeDto = 'sponsor' | 'partner' | 'speaker';
 
 export interface ExternalRelationDto {
   id: string;
@@ -24,14 +25,15 @@ export interface ExternalRelationDto {
   url: string;
 }
 
-const TYPE_OPTION: Record<RelationTypeDto, string> = { sponsor: 'Sponsor', partner: 'Partner' };
+const TYPE_OPTION: Record<RelationTypeDto, string> = { sponsor: 'Sponsor', partner: 'Partner', speaker: 'Speaker' };
+const TYPE_BY_OPTION = new Map(Object.entries(TYPE_OPTION).map(([type, option]) => [option, type as RelationTypeDto]));
 
 export function toExternalRelation(page: PageObjectResponse): ExternalRelationDto {
   const type = select(page, 'Type of Relation');
   return {
     id: page.id,
     name: title(page, 'Name') ?? '',
-    type: type === 'Sponsor' ? 'sponsor' : type === 'Partner' ? 'partner' : null,
+    type: (type ? TYPE_BY_OPTION.get(type) : undefined) ?? null,
     valueProvided: richText(page, 'Value Provided'),
     bountyUsdt: number(page, 'Bounty Amount (USDT)'),
     opsMyr: number(page, 'Ops Amount (MYR)'),
@@ -69,8 +71,8 @@ function parseName(value: unknown): string {
 }
 
 function parseType(value: unknown): RelationTypeDto {
-  if (value === 'sponsor' || value === 'partner') return value;
-  throw new HttpError(400, "Type must be 'sponsor' or 'partner'");
+  if (value === 'sponsor' || value === 'partner' || value === 'speaker') return value;
+  throw new HttpError(400, "Type must be 'sponsor', 'partner' or 'speaker'");
 }
 
 function parseText(value: unknown, label: string): string | null {
@@ -133,4 +135,11 @@ export async function updateExternalRelation(id: string, input: ExternalRelation
   cacheInvalidate('externalRelations:');
   if (!('properties' in page)) throw new HttpError(502, 'Notion did not return the updated relation');
   return toExternalRelation(page);
+}
+
+/** Move a relation to Notion's trash (restorable there for 30 days). */
+export async function deleteExternalRelation(id: string): Promise<void> {
+  if (!(await retrievePageIn('externalRelations', id))) throw new HttpError(404, 'Relation not found');
+  await notion().pages.update({ page_id: id, in_trash: true });
+  cacheInvalidate('externalRelations:');
 }
