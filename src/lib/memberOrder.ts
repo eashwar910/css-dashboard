@@ -10,6 +10,7 @@
 const ORDER: string[][] = [
   ['jack', 'lee yoonjae'],
   ['selina'],
+  ['min pyae phyo', 'minpyaephyo'],
   ['john'],
   ['sakinah'],
   ['faysal'],
