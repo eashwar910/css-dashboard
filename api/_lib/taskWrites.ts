@@ -2,6 +2,7 @@
 // Every write re-reads the page fresh, checks ownership (ownership.ts) and
 // clears the tasks cache afterwards. Rules: docs/PLAN.md "Ownership rules".
 
+import { isFullPage } from '@notionhq/client';
 import type { CommitteeMember } from './auth.js';
 import { HttpError, normalisePageId } from './http.js';
 import { cacheInvalidate, dataSourceId, notion, retrievePageIn } from './notion.js';
@@ -74,8 +75,10 @@ async function toDto(member: CommitteeMember, pageId: string): Promise<TaskDto> 
  * it shows as done this week and last week once the week turns.
  */
 export async function setTaskCompleted(member: CommitteeMember, taskId: string, completed: boolean): Promise<TaskDto> {
+  // Event names are usually cached; load them while Notion does the write.
+  const context = taskContext();
   const page = await authorise(member, taskId, 'toggle');
-  await notion().pages.update({
+  const updated = await notion().pages.update({
     page_id: taskId,
     properties: {
       Status: write.status(NOTION_STATUS[completed ? 'done' : 'todo']),
@@ -83,7 +86,10 @@ export async function setTaskCompleted(member: CommitteeMember, taskId: string, 
     },
   });
   cacheInvalidate('tasks:');
-  return toDto(member, taskId);
+  // The update returns the page, so skip re-reading it when it's complete.
+  if (!isFullPage(updated)) return toDto(member, taskId);
+  const { eventNames, week } = await context;
+  return toTask(updated, member, eventNames, week);
 }
 
 export interface TaskEdit {

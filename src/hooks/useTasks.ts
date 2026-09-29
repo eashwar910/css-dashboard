@@ -89,7 +89,7 @@ function replaceTask(task: Task) {
   store.update((v) => ({ ...v, tasks: v.tasks.map((t) => (t.id === task.id ? task : t)) }));
 }
 
-/** Ticks being saved: task id → the `completed` value being sent. */
+/** Ticks being saved: task id → the `completed` value the member wants. */
 const saving = new Map<string, boolean>();
 
 /** Show in-flight ticks over whatever the store holds, so a reload can't flip them back. */
@@ -99,22 +99,30 @@ function withSaving(task: Task): Task {
 }
 
 /**
- * Tick/untick. Optimistic; rolls back and rethrows if the server refuses.
- * Clicks on a task that's still saving are ignored, so saves never overlap.
+ * Tick/untick. Optimistic and instant; rolls back and rethrows if the server refuses.
+ * One save per task at a time: clicks while one is in flight just change the
+ * wanted value, and once the save lands it sends one more if that differs.
  */
 async function setCompleted(id: string, completed: boolean): Promise<void> {
-  if (saving.has(id)) return;
   const before = store.getSnapshot().value.tasks.find((t) => t.id === id);
   if (!before) return;
+  const inFlight = saving.has(id);
   saving.set(id, completed);
   replaceTask({ ...before, completed, status: completed ? 'done' : 'todo' });
+  if (inFlight) return;
   try {
-    const { task } = await apiFetch<{ task: TaskDto }>(`tasks?id=${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ completed }),
-    });
-    saving.delete(id);
-    replaceTask(toTask(task));
+    for (;;) {
+      const sending = saving.get(id)!;
+      const { task } = await apiFetch<{ task: TaskDto }>(`tasks?id=${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ completed: sending }),
+      });
+      if (saving.get(id) === sending) {
+        saving.delete(id);
+        replaceTask(toTask(task));
+        return;
+      }
+    }
   } catch (err) {
     saving.delete(id);
     replaceTask(before);
@@ -241,9 +249,8 @@ export function useTasks(): TasksResult {
   }, []);
 
   const toggleTask = useCallback((id: string) => {
-    if (saving.has(id)) return Promise.resolve();
     const task = store.getSnapshot().value.tasks.find((t) => t.id === id);
-    return task ? setCompleted(id, !task.completed) : Promise.resolve();
+    return task ? setCompleted(id, !(saving.get(id) ?? task.completed)) : Promise.resolve();
   }, []);
 
   const byProject = useMemo<Record<string, Task[]>>(() => {
