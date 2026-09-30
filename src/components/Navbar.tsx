@@ -90,7 +90,7 @@ export function Navbar({ currentView, onNavigate, searchQuery, onSearchChange }:
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background">
-      <div className="flex h-14 items-center gap-3 px-5 sm:px-6 lg:gap-8">
+      <div className="flex h-14 items-center gap-3 px-5 sm:px-6 xl:gap-8">
         {/* Masthead */}
         <div className="flex shrink-0 items-center gap-2">
           <Code2 className="h-4 w-4 text-primary shrink-0" />
@@ -98,8 +98,8 @@ export function Navbar({ currentView, onNavigate, searchQuery, onSearchChange }:
         </div>
 
         {/* Desktop navigation — plain text links, active one underlined */}
-        <nav className="hidden h-full flex-1 lg:block">
-          <ul className="flex h-full items-stretch gap-4 xl:gap-6">
+        <nav className="hidden h-full flex-1 items-center gap-6 xl:flex">
+          <ul className="flex h-full items-stretch gap-4 2xl:gap-6">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = currentView === item.id;
@@ -122,15 +122,15 @@ export function Navbar({ currentView, onNavigate, searchQuery, onSearchChange }:
               );
             })}
           </ul>
+          <SearchBox value={searchQuery} onChange={onSearchChange} className="w-44 shrink-0" />
         </nav>
 
-        {/* Desktop search + account — signed-in member, log out, theme toggle */}
-        <div className="hidden shrink-0 items-center gap-4 lg:flex">
-          <SearchBox value={searchQuery} onChange={onSearchChange} className="w-44" />
-          <div className="hidden min-w-0 max-w-[12rem] text-right xl:block">
-            <p className="truncate text-sm font-medium leading-tight">{displayName}</p>
+        {/* Desktop account — signed-in member, log out, theme toggle */}
+        <div className="hidden shrink-0 items-center gap-4 xl:flex">
+          <div className="whitespace-nowrap text-right">
+            <p className="text-sm font-medium leading-tight">{displayName}</p>
             {member?.role && (
-              <p className="truncate text-xs text-muted-foreground">{member.role}</p>
+              <p className="text-xs text-muted-foreground">{member.role}</p>
             )}
           </div>
           <button
@@ -146,8 +146,8 @@ export function Navbar({ currentView, onNavigate, searchQuery, onSearchChange }:
         </div>
 
         {/* Mobile: search, theme toggle + menu */}
-        <SearchBox value={searchQuery} onChange={onSearchChange} className="ml-auto min-w-0 max-w-xs flex-1 lg:hidden" />
-        <div className="flex items-center gap-2 lg:hidden">
+        <SearchBox value={searchQuery} onChange={onSearchChange} className="ml-auto min-w-0 max-w-xs flex-1 xl:hidden" />
+        <div className="flex items-center gap-2 xl:hidden">
           <ThemeToggleButton />
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
