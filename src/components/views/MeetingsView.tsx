@@ -494,11 +494,16 @@ function PeopleColumn({
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
 
-/** Alphabetical, with the signed-in member first. */
-function meFirst(list: MeetingAttendee[], me: string | null) {
-  return [...list]
-    .sort((a, b) => (a.id === me ? -1 : b.id === me ? 1 : byName(a, b)))
-    .map((a) => ({ key: a.id, name: a.name, id: a.id }));
+/**
+ * Alphabetical, with the signed-in member first. Named as on the Team tab
+ * where the roster knows them, so nobody appears under two names (their
+ * Notion account's, e.g. "wen", and their full name).
+ */
+function meFirst(list: MeetingAttendee[], me: string | null, roster: RosterMember[]) {
+  const teamName = new Map(roster.filter((r) => r.notionUserId).map((r) => [r.notionUserId!, r.name]));
+  return list
+    .map((a) => ({ key: a.id, name: teamName.get(a.id) ?? a.name, id: a.id }))
+    .sort((a, b) => (a.id === me ? -1 : b.id === me ? 1 : byName(a, b)));
 }
 
 function fromRoster(list: RosterMember[]) {
@@ -512,8 +517,8 @@ function MeetingAttendance({ meeting }: { meeting: Meeting }) {
   const upcoming = isUpcomingMeeting(meeting);
   const mine = myRsvp(meeting, me);
 
-  const going = useMemo(() => meFirst(meeting.attendees, me), [meeting.attendees, me]);
-  const notGoing = useMemo(() => meFirst(meeting.notGoing, me), [meeting.notGoing, me]);
+  const going = useMemo(() => meFirst(meeting.attendees, me, roster), [meeting.attendees, me, roster]);
+  const notGoing = useMemo(() => meFirst(meeting.notGoing, me, roster), [meeting.notGoing, me, roster]);
   const noReply = useMemo(
     () => fromRoster(roster.filter((r) => !isListed(r, meeting.attendees) && !isListed(r, meeting.notGoing))),
     [roster, meeting.attendees, meeting.notGoing]
@@ -615,10 +620,10 @@ function PastAttendance({ meeting }: { meeting: Meeting }) {
   const [editing, setEditing] = useState(false);
   const recorded = meeting.attended.length > 0;
 
-  const attended = useMemo(() => meFirst(meeting.attended, me), [meeting.attended, me]);
+  const attended = useMemo(() => meFirst(meeting.attended, me, roster), [meeting.attended, me, roster]);
   const absent = useMemo(() => fromRoster(roster.filter((r) => !isListed(r, meeting.attended))), [roster, meeting.attended]);
-  const optedIn = useMemo(() => meFirst(meeting.attendees, me), [meeting.attendees, me]);
-  const optedOut = useMemo(() => meFirst(meeting.notGoing, me), [meeting.notGoing, me]);
+  const optedIn = useMemo(() => meFirst(meeting.attendees, me, roster), [meeting.attendees, me, roster]);
+  const optedOut = useMemo(() => meFirst(meeting.notGoing, me, roster), [meeting.notGoing, me, roster]);
   const noReply = useMemo(
     () => fromRoster(roster.filter((r) => !isListed(r, meeting.attendees) && !isListed(r, meeting.notGoing))),
     [roster, meeting.attendees, meeting.notGoing]
@@ -627,8 +632,8 @@ function PastAttendance({ meeting }: { meeting: Meeting }) {
   const noShows = useMemo(() => {
     const came = (a: MeetingAttendee) =>
       meeting.attended.some((x) => x.id === a.id || x.name.trim().toLowerCase() === a.name.trim().toLowerCase());
-    return meFirst(meeting.attendees.filter((a) => !came(a)), me);
-  }, [meeting.attendees, meeting.attended, me]);
+    return meFirst(meeting.attendees.filter((a) => !came(a)), me, roster);
+  }, [meeting.attendees, meeting.attended, me, roster]);
 
   return (
     <>

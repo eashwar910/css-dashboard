@@ -23,6 +23,8 @@ export interface AssignableMember {
   email: string;
   name: string;
   role: string | null;
+  /** Their Notion user id (matches task assignees), or null if not linked. */
+  notionUserId: string | null;
 }
 
 interface TaskRequestsValue {

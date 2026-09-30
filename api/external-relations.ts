@@ -1,8 +1,10 @@
 // /api/external-relations
 //   GET                  sponsors, partners and speakers → { relations }
-//   POST                 create { name, type, valueProvided?, bountyUsdt?, opsMyr?,
-//                        sponsorshipFormUrl?, proofOfPaymentUrl? } → { relation }
-//   PATCH  ?id=<page id> edit any of those fields → { relation }
+//   POST                 create { name, type, valueProvided?, bountyMyr?, opsMyr?,
+//                        sponsorshipFormUrl?, proofOfPaymentUrl?, notes? } → { relation }
+//                        notes: Markdown for the page body
+//   PATCH  ?id=<page id> edit any of those fields except notes → { relation }
+//                        (notes are the page body: GET/PUT /api/event-content)
 //   DELETE ?id=<page id> move to Notion's trash → { ok: true }
 
 import { requireCommittee } from './_lib/auth.js';

@@ -27,6 +27,8 @@ export interface AssignableMemberDto {
   email: string;
   name: string;
   role: string | null;
+  /** Their Notion user id (matches task assignees), or null if not linked. */
+  notionUserId: string | null;
 }
 
 /** Today's date (YYYY-MM-DD) where the society is, not in UTC. */
@@ -47,10 +49,11 @@ async function requireAssigner(member: CommitteeMember) {
 /** Everyone else on the ExCo with a committee email, for the assignee dropdown. */
 export async function assignableMembers(member: CommitteeMember): Promise<AssignableMemberDto[]> {
   const self = new Set([member.email, member.notionEmail].filter(Boolean));
-  return (await loadTeam())
-    .filter((m): m is typeof m & { email: string } => !!m.email && !self.has(m.email.toLowerCase()))
-    .map((m) => ({ email: m.email, name: m.name, role: m.role }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const team = (await loadTeam()).filter((m): m is typeof m & { email: string } => !!m.email && !self.has(m.email.toLowerCase()));
+  const members = await Promise.all(
+    team.map(async (m) => ({ email: m.email, name: m.name, role: m.role, notionUserId: await getNotionUserIdForMemberEmail(m.email) })),
+  );
+  return members.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function toRequest(page: PageObjectResponse): TaskRequestDto {

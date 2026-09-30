@@ -15,7 +15,10 @@ import {
   LogOut,
   Sun,
   Moon,
+  Search,
+  X,
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/components/ThemeProvider';
 
@@ -24,6 +27,9 @@ export type View = 'home' | 'weekly' | 'events' | 'meetings' | 'team' | 'finance
 interface NavbarProps {
   currentView: View;
   onNavigate: (view: View) => void;
+  /** Search across events, docs and members; results show on Home. */
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
 }
 
 const navItems: { id: View; label: string; icon: typeof Home }[] = [
@@ -50,14 +56,41 @@ function ThemeToggleButton() {
   );
 }
 
-export function Navbar({ currentView, onNavigate }: NavbarProps) {
+function SearchBox({ value, onChange, className }: { value: string; onChange: (query: string) => void; className?: string }) {
+  return (
+    <div className={cn('relative', className)}>
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        type="search"
+        placeholder="Search events, docs, members..."
+        aria-label="Search events, docs and members"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ borderRadius: 0 }}
+        className="h-8 border-border bg-background pl-8 pr-7 text-xs placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring [&::-webkit-search-cancel-button]:hidden"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          aria-label="Clear search"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function Navbar({ currentView, onNavigate, searchQuery, onSearchChange }: NavbarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, member, signOut } = useAuth();
   const displayName = member?.full_name ?? user?.email;
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background">
-      <div className="flex h-14 items-center gap-8 px-5 sm:px-6">
+      <div className="flex h-14 items-center gap-3 px-5 sm:px-6 lg:gap-8">
         {/* Masthead */}
         <div className="flex shrink-0 items-center gap-2">
           <Code2 className="h-4 w-4 text-primary shrink-0" />
@@ -91,8 +124,9 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
           </ul>
         </nav>
 
-        {/* Desktop account — signed-in member, log out, theme toggle */}
+        {/* Desktop search + account — signed-in member, log out, theme toggle */}
         <div className="hidden shrink-0 items-center gap-4 lg:flex">
+          <SearchBox value={searchQuery} onChange={onSearchChange} className="w-44" />
           <div className="hidden min-w-0 max-w-[12rem] text-right xl:block">
             <p className="truncate text-sm font-medium leading-tight">{displayName}</p>
             {member?.role && (
@@ -111,8 +145,9 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
           <ThemeToggleButton />
         </div>
 
-        {/* Mobile: theme toggle + menu */}
-        <div className="ml-auto flex items-center gap-2 lg:hidden">
+        {/* Mobile: search, theme toggle + menu */}
+        <SearchBox value={searchQuery} onChange={onSearchChange} className="ml-auto min-w-0 max-w-xs flex-1 lg:hidden" />
+        <div className="flex items-center gap-2 lg:hidden">
           <ThemeToggleButton />
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>

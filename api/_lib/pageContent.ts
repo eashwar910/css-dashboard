@@ -1,5 +1,6 @@
-// Page bodies: an event's Overview and a meeting's notes/minutes. Any
-// committee member can edit an event's; organisers (roles.ts) a meeting's.
+// Page bodies: an event's Overview, a meeting's notes/minutes and an external
+// relation's notes. Any committee member can edit an event's or a relation's;
+// organisers (roles.ts) a meeting's.
 // The dashboard's rich-text editor loads `editorMarkdown` and saves Markdown
 // back with `pages.updateMarkdown` (see src/lib/editorExtensions.ts for what
 // round-trips; scripts/check-editor-roundtrip.ts tests it on real pages).
@@ -9,6 +10,7 @@ import { HttpError } from './http.js';
 import { cacheInvalidate, cached, notion } from './notion.js';
 import { toDisplayMarkdown, toEditorMarkdown } from './notionMarkdown.js';
 import { eventPages } from './events.js';
+import { relationPages } from './externalRelations.js';
 import { meetingPages } from './meetings.js';
 import { isOrganiser, ORGANISER_ONLY } from './roles.js';
 import { userNamesById } from './users.js';
@@ -26,18 +28,19 @@ export interface PageContentDto {
   canEdit: boolean;
 }
 
-type Source = 'events' | 'meetings';
+type Source = 'events' | 'meetings' | 'externalRelations';
 
 /** Which database a page id is a live row of, using the cached lists. */
 async function sourceOf(id: string): Promise<Source | null> {
-  const [events, meetings] = await Promise.all([eventPages(), meetingPages()]);
+  const [events, meetings, relations] = await Promise.all([eventPages(), meetingPages(), relationPages()]);
   if (events.some((p) => p.id === id)) return 'events';
   if (meetings.some((p) => p.id === id)) return 'meetings';
+  if (relations.some((p) => p.id === id)) return 'externalRelations';
   return null;
 }
 
 async function canEditSource(member: CommitteeMember, source: Source): Promise<boolean> {
-  return source === 'events' || isOrganiser(member);
+  return source !== 'meetings' || isOrganiser(member);
 }
 
 async function readContent(id: string, source: Source) {
@@ -53,8 +56,8 @@ async function readContent(id: string, source: Source) {
 }
 
 /**
- * The page body of an event or meeting. Returns null if the id isn't a live
- * row of either database, so arbitrary Notion pages can't be read through this.
+ * The page body of an event, meeting or external relation. Returns null if
+ * the id isn't a live row of one of those databases, so arbitrary Notion pages can't be read through this.
  */
 export async function loadPageContent(member: CommitteeMember, id: string): Promise<PageContentDto | null> {
   const source = await sourceOf(id);

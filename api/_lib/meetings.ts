@@ -13,7 +13,7 @@ import { dates } from './events.js';
 import { date, people, select, title, write } from './props.js';
 import { parseTimeline } from './eventWrites.js';
 import { isOrganiser, ORGANISER_ONLY } from './roles.js';
-import { getNotionUserIdForMemberEmail, notionUserIdFor } from './users.js';
+import { getNotionUserIdForMemberEmail, notionUserIdFor, userNamesById } from './users.js';
 import { loadTeam } from './team.js';
 
 export interface MeetingDto {
@@ -81,12 +81,34 @@ export interface RosterMemberDto {
   notionUserId: string | null;
 }
 
-/** The ExCo, each with their Notion user id where one can be found by email. */
+/** Lowercase words of a name, ignoring dots and other punctuation. */
+function nameWords(name: string): string[] {
+  return name.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+/**
+ * The ExCo, each with their Notion user id. Found by email first; members with
+ * no committee email (so no match) fall back to the one Notion account nobody
+ * else claimed whose name is made of words from theirs ("wen" → "Quek Jia Wen").
+ * Without this they'd show twice on a meeting: under their Notion name and under No reply.
+ */
 export async function loadRoster(): Promise<RosterMemberDto[]> {
-  const team = await loadTeam();
-  return Promise.all(
+  const [team, names] = await Promise.all([loadTeam(), userNamesById()]);
+  const roster = await Promise.all(
     team.map(async (m) => ({ name: m.name, notionUserId: await getNotionUserIdForMemberEmail(m.email) })),
   );
+  const claimed = new Set(roster.map((r) => r.notionUserId).filter(Boolean));
+  const unclaimed = [...names].filter(([id]) => !claimed.has(id));
+  for (const member of roster) {
+    if (member.notionUserId) continue;
+    const words = new Set(nameWords(member.name));
+    const matches = unclaimed.filter(([, name]) => {
+      const theirs = nameWords(name);
+      return theirs.length > 0 && theirs.every((w) => words.has(w));
+    });
+    if (matches.length === 1) member.notionUserId = matches[0][0];
+  }
+  return roster;
 }
 
 // ── Attendance (any committee member, for themselves) ────────────────────────

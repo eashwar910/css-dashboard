@@ -19,7 +19,7 @@ export interface ExternalRelation {
   type: RelationType | null;
   /** Partners: what they give the society, e.g. AI credits. Speakers: talk details. */
   valueProvided: string | null;
-  bountyUsdt: number | null;
+  bountyMyr: number | null;
   opsMyr: number | null;
   sponsorshipFormUrl: string | null;
   proofOfPaymentUrl: string | null;
@@ -30,6 +30,8 @@ export interface ExternalRelation {
 export type ExternalRelationInput = Partial<Omit<ExternalRelation, 'id' | 'url' | 'type'>> & {
   name: string;
   type: RelationType;
+  /** Create only: Markdown for the Notion page body. Edits go through /api/event-content. */
+  notes?: string;
 };
 
 export function useExternalRelations() {

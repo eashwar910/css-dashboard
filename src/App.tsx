@@ -38,13 +38,20 @@ function ThemeToggle() {
 
 function Dashboard() {
   const [view, setView] = useState<View>('home');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Search results live on Home, so typing from another tab goes there
+  const handleSearchChange = (query: string) => {
+    setSearchQuery(query);
+    if (query.trim()) setView('home');
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <Navbar currentView={view} onNavigate={setView} />
+      <Navbar currentView={view} onNavigate={setView} searchQuery={searchQuery} onSearchChange={handleSearchChange} />
       <main className="flex-1">
         <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8 lg:px-12">
-          {view === 'home' && <HomeView onNavigate={setView} />}
+          {view === 'home' && <HomeView onNavigate={setView} searchQuery={searchQuery} onSearchChange={setSearchQuery} />}
           {view === 'weekly' && <WeeklyView />}
           {view === 'events' && <EventsView />}
           {view === 'meetings' && <MeetingsView />}

@@ -8,7 +8,8 @@ import { HttpError, normalisePageId } from './http.js';
 import { cacheInvalidate, dataSourceId, notion, retrievePageIn } from './notion.js';
 import { canModifyTask, type TaskAction } from './ownership.js';
 import { date, write } from './props.js';
-import { klMonday, taskContext, toTask, type TaskDto, type TaskStatusDto } from './tasks.js';
+import { managesAllTasks } from './roles.js';
+import { klMonday, taskContext, toTask, type TaskDto, type TaskStatusDto, type TaskViewer } from './tasks.js';
 import { notionUserIdFor } from './users.js';
 
 /** Dashboard status → exact Notion `Status` option (NOTION_MAPPING.md). */
@@ -51,11 +52,16 @@ async function parseEventId(value: unknown): Promise<string | null> {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+/** The member plus whether they may change anyone's task. */
+async function viewerFor(member: CommitteeMember): Promise<TaskViewer> {
+  return { ...member, managesAllTasks: await managesAllTasks(member) };
+}
+
 /** Fresh read + ownership check. Throws 404 or 403 (with the reason). */
 async function authorise(member: CommitteeMember, taskId: string, action: TaskAction) {
-  const page = await retrievePageIn('tasks', taskId);
+  const [page, viewer] = await Promise.all([retrievePageIn('tasks', taskId), viewerFor(member)]);
   if (!page) throw new HttpError(404, 'Task not found');
-  const decision = canModifyTask(member, page, action);
+  const decision = canModifyTask(viewer, page, action);
   if (!decision.allowed) throw new HttpError(403, decision.message, { reason: decision.reason });
   return page;
 }
@@ -63,8 +69,8 @@ async function authorise(member: CommitteeMember, taskId: string, action: TaskAc
 async function toDto(member: CommitteeMember, pageId: string): Promise<TaskDto> {
   const page = await retrievePageIn('tasks', pageId);
   if (!page) throw new HttpError(404, 'Task not found after update');
-  const { eventNames, week } = await taskContext();
-  return toTask(page, member, eventNames, week);
+  const [{ eventNames, week }, viewer] = await Promise.all([taskContext(), viewerFor(member)]);
+  return toTask(page, viewer, eventNames, week);
 }
 
 // ── Writes ───────────────────────────────────────────────────────────────────
@@ -88,8 +94,8 @@ export async function setTaskCompleted(member: CommitteeMember, taskId: string, 
   cacheInvalidate('tasks:');
   // The update returns the page, so skip re-reading it when it's complete.
   if (!isFullPage(updated)) return toDto(member, taskId);
-  const { eventNames, week } = await context;
-  return toTask(updated, member, eventNames, week);
+  const [{ eventNames, week }, viewer] = await Promise.all([context, viewerFor(member)]);
+  return toTask(updated, viewer, eventNames, week);
 }
 
 export interface TaskEdit {

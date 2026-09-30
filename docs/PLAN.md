@@ -83,6 +83,7 @@ Restructured 2026-09-29 after the President's review (`scripts/restructure-meeti
 ## Ownership rules (enforced server-side on every write)
 - A user can **tick, edit or delete** a task if any PIC person's email matches their login email or their `committee_members.notion_email`, compared case-insensitively. `notion_email` is a nullable column; one member's Notion email is a personal Gmail.
 - Tasks assigned only to a group (e.g. "Everyone") or with no PIC can be **ticked/unticked** by any committee member. Editing or deleting them is admin-only.
+- The President, Vice President and Head of Tech (roles.ts `ASSIGNER_ROLES`) can tick, edit or delete any task.
 - `committee_members.is_admin = true` can do anything. `is_admin` is a boolean column, default false. `role` is only a job title and grants no permissions.
 
 ## Team

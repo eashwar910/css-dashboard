@@ -41,8 +41,8 @@ export interface TaskDto {
   can: { toggle: boolean; edit: boolean; delete: boolean };
 }
 
-/** The member fields task mapping needs. */
-export type TaskViewer = Pick<CommitteeMember, 'email' | 'notionEmail' | 'isAdmin'>;
+/** The member fields task mapping needs. managesAllTasks: roles.ts managesAllTasks(). */
+export type TaskViewer = Pick<CommitteeMember, 'email' | 'notionEmail' | 'isAdmin'> & { managesAllTasks?: boolean };
 
 const STATUS_MAP: Record<string, TaskStatusDto> = {
   'Not started': 'todo',

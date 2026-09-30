@@ -17,7 +17,7 @@ export interface ExternalRelationDto {
   /** null when `Type of Relation` is unset. */
   type: RelationTypeDto | null;
   valueProvided: string | null;
-  bountyUsdt: number | null;
+  bountyMyr: number | null;
   opsMyr: number | null;
   sponsorshipFormUrl: string | null;
   proofOfPaymentUrl: string | null;
@@ -35,7 +35,8 @@ export function toExternalRelation(page: PageObjectResponse): ExternalRelationDt
     name: title(page, 'Name') ?? '',
     type: (type ? TYPE_BY_OPTION.get(type) : undefined) ?? null,
     valueProvided: richText(page, 'Value Provided'),
-    bountyUsdt: number(page, 'Bounty Amount (USDT)'),
+    // The Notion column is still named USDT; the amounts are ringgit.
+    bountyMyr: number(page, 'Bounty Amount (USDT)'),
     opsMyr: number(page, 'Ops Amount (MYR)'),
     sponsorshipFormUrl: url(page, 'Sponsorship Form'),
     proofOfPaymentUrl: url(page, 'Proof of Payment'),
@@ -43,12 +44,16 @@ export function toExternalRelation(page: PageObjectResponse): ExternalRelationDt
   };
 }
 
-/** Rows with a name, alphabetical. Blank rows (Notion's default empty row) are skipped. */
-export async function loadExternalRelations(): Promise<ExternalRelationDto[]> {
-  const pages = await cached('externalRelations:pages', () =>
+/** Every row, alphabetical. Cached. */
+export async function relationPages(): Promise<PageObjectResponse[]> {
+  return cached('externalRelations:pages', () =>
     queryAll(dataSourceId('externalRelations'), { sorts: [{ property: 'Name', direction: 'ascending' }] }),
   );
-  return pages.map(toExternalRelation).filter((r) => r.name.trim() !== '');
+}
+
+/** Rows with a name, alphabetical. Blank rows (Notion's default empty row) are skipped. */
+export async function loadExternalRelations(): Promise<ExternalRelationDto[]> {
+  return (await relationPages()).map(toExternalRelation).filter((r) => r.name.trim() !== '');
 }
 
 // ── Writes ───────────────────────────────────────────────────────────────────
@@ -57,10 +62,12 @@ export interface ExternalRelationInput {
   name?: unknown;
   type?: unknown;
   valueProvided?: unknown;
-  bountyUsdt?: unknown;
+  bountyMyr?: unknown;
   opsMyr?: unknown;
   sponsorshipFormUrl?: unknown;
   proofOfPaymentUrl?: unknown;
+  /** Create only: Markdown for the page body (the notes). Later edits go through /api/event-content. */
+  notes?: unknown;
 }
 
 function parseName(value: unknown): string {
@@ -107,17 +114,25 @@ function toProperties(input: ExternalRelationInput, requireAll: boolean): NonNul
   if (has('name')) props.Name = write.title(parseName(input.name));
   if (has('type')) props['Type of Relation'] = write.select(TYPE_OPTION[parseType(input.type)]);
   if ('valueProvided' in input) props['Value Provided'] = write.richText(parseText(input.valueProvided, 'Value provided'));
-  if ('bountyUsdt' in input) props['Bounty Amount (USDT)'] = write.number(parseAmount(input.bountyUsdt, 'Bounty amount'));
+  if ('bountyMyr' in input) props['Bounty Amount (USDT)'] = write.number(parseAmount(input.bountyMyr, 'Bounty amount'));
   if ('opsMyr' in input) props['Ops Amount (MYR)'] = write.number(parseAmount(input.opsMyr, 'Ops amount'));
   if ('sponsorshipFormUrl' in input) props['Sponsorship Form'] = { url: parseLink(input.sponsorshipFormUrl, 'Sponsorship form') };
   if ('proofOfPaymentUrl' in input) props['Proof of Payment'] = { url: parseLink(input.proofOfPaymentUrl, 'Proof of payment') };
   return props;
 }
 
+function parseNotes(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string' || value.length > 200_000) throw new HttpError(400, 'Notes must be text, and not too long');
+  return value.trim() || undefined;
+}
+
 export async function createExternalRelation(input: ExternalRelationInput): Promise<ExternalRelationDto> {
+  const notes = parseNotes(input.notes);
   const page = await notion().pages.create({
     parent: { type: 'data_source_id', data_source_id: dataSourceId('externalRelations') },
     properties: toProperties(input, true),
+    ...(notes ? { markdown: notes } : {}),
   });
   cacheInvalidate('externalRelations:');
   if (!('properties' in page)) throw new HttpError(502, 'Notion did not return the new relation');

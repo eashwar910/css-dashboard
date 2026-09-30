@@ -60,3 +60,10 @@ export async function createEpf(member: CommitteeMember, eventId: string, file: 
   if (!('properties' in page)) throw new HttpError(502, 'Notion did not return the new EPF');
   return toEpf(page);
 }
+
+/** Move an EPF to Notion's trash (restorable there for 30 days). Any committee member may do this. */
+export async function deleteEpf(id: string): Promise<void> {
+  if (!(await retrievePageIn('epf', id))) throw new HttpError(404, 'EPF not found');
+  await notion().pages.update({ page_id: id, in_trash: true });
+  cacheInvalidate('epf:');
+}

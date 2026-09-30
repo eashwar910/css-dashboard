@@ -5,13 +5,14 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Pencil, Plus, AlertCircle } from 'lucide-react';
+import { Pencil, Plus, AlertCircle, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 import { useTasks, type PersonGroup } from '@/hooks/useTasks';
+import { useTaskRequests } from '@/hooks/useTaskRequests';
 import { compareMembers } from '@/lib/memberOrder';
 import type { Task } from '@/lib/types';
 import { TaskEditDialog } from '@/components/TaskEditDialog';
-import { AssignTaskForm } from '@/components/AssignTaskForm';
 import { parseDate } from '@/lib/eventDates';
 
 /** "Due Sep 30", or null when there's no due date. */
@@ -115,7 +116,7 @@ function TaskList({
   );
 }
 
-/** One person's this-week and overdue to-dos, merged from both groupings. */
+/** One person's this-week and last-week (overdue) to-dos, merged from both groupings. */
 interface PersonRow {
   key: string;
   name: string;
@@ -124,9 +125,13 @@ interface PersonRow {
   overdue: Task[];
 }
 
-function personRows(thisWeekGroups: PersonGroup[], overdueGroups: PersonGroup[]): PersonRow[] {
+type Person = Pick<PersonGroup, 'key' | 'name' | 'isMe'>;
+
+/** A row per person with to-dos, plus `extra` people (boxes to add to) who have none yet. */
+function personRows(thisWeekGroups: PersonGroup[], overdueGroups: PersonGroup[], extra: Person[]): PersonRow[] {
   const rows = new Map<string, PersonRow>();
-  const order = [...thisWeekGroups, ...overdueGroups].sort((a, b) => compareMembers(a.name, b.name) || a.name.localeCompare(b.name));
+  const grouped = new Set([...thisWeekGroups, ...overdueGroups].map((g) => g.key));
+  const order = [...thisWeekGroups, ...overdueGroups, ...extra.filter((p) => !grouped.has(p.key))].sort((a, b) => compareMembers(a.name, b.name) || a.name.localeCompare(b.name));
   for (const g of order) {
     if (!rows.has(g.key)) rows.set(g.key, { key: g.key, name: g.name, isMe: g.isMe, thisWeek: [], overdue: [] });
   }
@@ -150,12 +155,82 @@ function ColumnLabel({ title, tasks, className }: { title: string; tasks: Task[]
   );
 }
 
+/**
+ * Add a to-do under a person's name. Your own box creates the task directly;
+ * anyone else's (President, Vice President and Head of Tech only) sends them
+ * a request to accept, and it joins their list once they do.
+ */
+function AddTaskForm({ name, isMe, assigneeEmail }: { name: string; isMe: boolean; assigneeEmail?: string }) {
+  const { createTask } = useTasks();
+  const { assign } = useTaskRequests();
+  const { toast } = useToast();
+  const [title, setTitle] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const text = title.trim();
+    if (!text || saving) return;
+    setSaving(true);
+    try {
+      if (isMe) {
+        const { warning } = await createTask({ title: text, ...(dueDate ? { dueDate } : {}) });
+        if (warning) toast({ title: 'Task added without a PIC', description: warning });
+      } else {
+        await assign({ title: text, assigneeEmail: assigneeEmail!, dueDate: dueDate || undefined });
+        toast({ title: 'Task request sent', description: `${name} will see it next time they open the dashboard.` });
+      }
+      setTitle('');
+      setDueDate('');
+    } catch (err) {
+      toast({ title: "Couldn't add task", description: (err as Error).message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="mb-4 flex flex-col gap-2 sm:flex-row">
+      <Input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder={isMe ? 'Add a to-do for yourself…' : `Add a to-do for ${name}…`}
+        maxLength={2000}
+        disabled={saving}
+        style={{ borderRadius: 0 }}
+        className="h-8 flex-1 text-xs"
+        aria-label={isMe ? 'New to-do' : `New to-do for ${name}`}
+      />
+      <Input
+        type="date"
+        value={dueDate}
+        onChange={(e) => setDueDate(e.target.value)}
+        disabled={saving}
+        style={{ borderRadius: 0 }}
+        className="h-8 text-xs sm:w-36"
+        aria-label="Due date (optional)"
+        title="Due date (optional)"
+      />
+      <Button type="submit" size="sm" variant="outline" style={{ borderRadius: 0 }} className="h-8 text-xs" disabled={saving || !title.trim()}>
+        {isMe ? <Plus className="mr-1 h-3 w-3" /> : <Send className="mr-1 h-3 w-3" />}
+        {saving ? (isMe ? 'Adding…' : 'Sending…') : isMe ? 'Add' : 'Assign'}
+      </Button>
+    </form>
+  );
+}
+
 function PersonBoxes({
   rows,
+  emailFor,
+  canAssign,
   onToggle,
   onEdit,
 }: {
   rows: PersonRow[];
+  /** Committee email for a person key, needed to assign them a task. */
+  emailFor: (key: string) => string | undefined;
+  canAssign: boolean;
   onToggle: (id: string) => void;
   onEdit: (task: Task) => void;
 }) {
@@ -168,14 +243,17 @@ function PersonBoxes({
             {row.name}
             {row.isMe && <span className="ml-2 text-sm font-normal text-primary">(you)</span>}
           </h3>
+          {(row.isMe || (canAssign && emailFor(row.key))) && (
+            <AddTaskForm name={row.name} isMe={row.isMe} assigneeEmail={emailFor(row.key)} />
+          )}
           <div className="grid gap-6 lg:grid-cols-2 lg:gap-10">
             <div>
               <ColumnLabel title="This week" tasks={row.thisWeek} />
               <TaskList tasks={row.thisWeek} empty="Nothing this week." onToggle={onToggle} onEdit={onEdit} />
             </div>
             <div>
-              <ColumnLabel title="Overdue" tasks={row.overdue} />
-              <TaskList tasks={row.overdue} empty="Nothing overdue." onToggle={onToggle} onEdit={onEdit} />
+              <ColumnLabel title="Last week" tasks={row.overdue} />
+              <TaskList tasks={row.overdue} empty="Nothing from last week." onToggle={onToggle} onEdit={onEdit} />
             </div>
           </div>
         </section>
@@ -200,7 +278,7 @@ function GroupsSkeleton() {
   );
 }
 
-/** Everyone's weekly to-dos, one box per person: this week beside overdue (last week's). */
+/** Everyone's weekly to-dos, one box per person: this week beside last week's (overdue). */
 export function WeeklyView() {
   const {
     thisWeek,
@@ -209,16 +287,25 @@ export function WeeklyView() {
     overdueGroups,
     weekStart,
     notionLinked,
+    notionUserId,
     toggleTask,
-    createTask,
     isLoading,
     error,
   } = useTasks();
+  const { canAssign, members } = useTaskRequests();
+  const { member } = useAuth();
   const { toast } = useToast();
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [addingTask, setAddingTask] = useState(false);
+
+  // Empty boxes too, so there's somewhere to add: your own, and everyone's for those who can assign.
+  const extraPeople: Person[] = [
+    ...(notionUserId ? [{ key: notionUserId, name: member?.full_name ?? 'You', isMe: true }] : []),
+    ...(canAssign
+      ? members.filter((m) => m.notionUserId).map((m) => ({ key: m.notionUserId!, name: m.name, isMe: false }))
+      : []),
+  ];
+  const emailFor = (key: string) => members.find((m) => m.notionUserId === key)?.email;
 
   const handleToggleTask = (id: string) => {
     toggleTask(id).catch((err: unknown) =>
@@ -226,28 +313,12 @@ export function WeeklyView() {
     );
   };
 
-  const handleAddTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const title = newTaskTitle.trim();
-    if (!title || addingTask) return;
-    setAddingTask(true);
-    try {
-      const { warning } = await createTask({ title });
-      setNewTaskTitle('');
-      if (warning) toast({ title: 'Task added without a PIC', description: warning });
-    } catch (err) {
-      toast({ title: "Couldn't add task", description: (err as Error).message, variant: 'destructive' });
-    } finally {
-      setAddingTask(false);
-    }
-  };
-
   return (
     <div className="space-y-10">
       <header className="border-b border-border pb-6">
         <h1 className="font-serif text-3xl font-semibold leading-tight sm:text-4xl">Weekly</h1>
         <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-          Everyone's to-dos by person: due this week or later on the left, overdue on the right. A to-do with no due date counts from the day it was added. Saved to Notion.
+          Everyone's to-dos by person: due this week or later on the left, last week's (anything earlier still open) on the right. A to-do with no due date counts from the day it was added. Saved to Notion.
           {!isLoading && !notionLinked && (
             <span className="mt-1 block text-destructive">
               Your login email doesn't match a Notion account, so none of these are marked as yours. Ask an admin to set your Notion email.
@@ -275,7 +346,7 @@ export function WeeklyView() {
             </div>
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="font-serif text-2xl font-semibold">
-                Overdue <span className="ml-1 text-sm font-normal text-muted-foreground">{beforeWeek(weekStart)}</span>
+                Last week <span className="ml-1 text-sm font-normal text-muted-foreground">{beforeWeek(weekStart)}</span>
               </h2>
               <span className="text-sm text-muted-foreground">
                 {isLoading ? 'Loading...' : `${doneCount(overdue)} of ${overdue.length} done`}
@@ -286,30 +357,14 @@ export function WeeklyView() {
           {isLoading ? (
             <GroupsSkeleton />
           ) : (
-            <PersonBoxes rows={personRows(thisWeekGroups, overdueGroups)} onToggle={handleToggleTask} onEdit={setEditingTask} />
+            <PersonBoxes
+              rows={personRows(thisWeekGroups, overdueGroups, extraPeople)}
+              emailFor={emailFor}
+              canAssign={canAssign}
+              onToggle={handleToggleTask}
+              onEdit={setEditingTask}
+            />
           )}
-
-          {/* Add a task for yourself (this week, no event) */}
-          {!isLoading && (
-            <form onSubmit={handleAddTask} className="mt-6 flex max-w-xl gap-2">
-              <Input
-                value={newTaskTitle}
-                onChange={(e) => setNewTaskTitle(e.target.value)}
-                placeholder="Add a to-do for yourself this week…"
-                disabled={addingTask}
-                style={{ borderRadius: 0 }}
-                className="h-8 text-xs"
-              />
-              <Button type="submit" size="sm" variant="outline" style={{ borderRadius: 0 }} className="h-8 text-xs" disabled={addingTask || !newTaskTitle.trim()}>
-                <Plus className="mr-1 h-3 w-3" />
-                {addingTask ? 'Adding…' : 'Add'}
-              </Button>
-            </form>
-          )}
-
-          <div className="max-w-xl">
-            <AssignTaskForm />
-          </div>
         </div>
       )}
 

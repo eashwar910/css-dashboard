@@ -9,6 +9,7 @@ import { requireCommittee } from './_lib/auth.js';
 import { HttpError, jsonBody, pageIdParam, sendJson, withHandler } from './_lib/http.js';
 import { createTask, deleteTask, editTask, setTaskCompleted } from './_lib/taskWrites.js';
 import { loadTasks } from './_lib/tasks.js';
+import { managesAllTasks } from './_lib/roles.js';
 import { notionUserIdFor } from './_lib/users.js';
 
 export default withHandler(
@@ -19,7 +20,8 @@ export default withHandler(
 
     switch (req.method) {
       case 'GET': {
-        const [result, notionUserId] = await Promise.all([loadTasks(member), notionUserIdFor(member)]);
+        const [manager, notionUserId] = await Promise.all([managesAllTasks(member), notionUserIdFor(member)]);
+        const result = await loadTasks({ ...member, managesAllTasks: manager });
         // notionLinked=false means no Notion user has this member's email, so
         // nothing can be "mine" until committee_members.notion_email is set.
         sendJson(res, 200, { ...result, notionLinked: notionUserId !== null, notionUserId });

@@ -7,7 +7,7 @@ import { createApiStore } from '@/lib/apiStore';
 //
 // Event Proposal Forms from GET /api/epf (Notion: Documents > Event Proposal
 // Forms), shared across the Events list, event dialog and Add Event form.
-// uploadEpf saves a file to Notion linked to an event.
+// uploadEpf saves a file to Notion linked to an event; deleteEpf trashes one.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface Epf {
@@ -54,5 +54,17 @@ export function useEpfs() {
     return epf;
   }, []);
 
-  return { data, byEvent, isLoading, error, uploadEpf };
+  /** Move to Notion's trash. Optimistic; restores the EPF and rethrows on error. */
+  const deleteEpf = useCallback(async (id: string): Promise<void> => {
+    const before = store.getSnapshot().value;
+    store.update((epfs) => epfs.filter((e) => e.id !== id));
+    try {
+      await apiFetch(`epf?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    } catch (err) {
+      store.update(() => before);
+      throw err;
+    }
+  }, []);
+
+  return { data, byEvent, isLoading, error, uploadEpf, deleteEpf };
 }

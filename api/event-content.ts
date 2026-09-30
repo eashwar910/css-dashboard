@@ -1,4 +1,4 @@
-// /api/event-content?id=<page id>  (an event's Overview or a meeting's notes/minutes)
+// /api/event-content?id=<page id>  (an event's Overview, a meeting's notes/minutes or a relation's notes)
 //   GET   the page body → { markdown, editorMarkdown, source, truncated, canEdit }
 //   PUT   replace it { markdown, base } → same shape; 409 if it changed in Notion meanwhile
 

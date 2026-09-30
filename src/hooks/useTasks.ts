@@ -232,6 +232,8 @@ export interface TasksResult extends AsyncResult<Task[]> {
   weekStart: string | null;
   /** False when no Notion user matches the member's email (see committee_members.notion_email). */
   notionLinked: boolean;
+  /** The signed-in member's Notion user id (a PersonGroup key), or null when not linked. */
+  notionUserId: string | null;
   /** All tasks linked to an event (the event detail to-do list). */
   forEvent: (eventId: string) => Task[];
   /** Tick/untick (Done ↔ Not started), saved to Notion. Rejects after rolling back if refused. */
@@ -298,6 +300,7 @@ export function useTasks(): TasksResult {
     overdueGroups,
     weekStart: value.weekStart,
     notionLinked: value.notionLinked,
+    notionUserId: value.notionUserId,
     forEvent,
     toggleTask,
     createTask,

@@ -31,4 +31,9 @@ export async function isOrganiser(member: CommitteeMember): Promise<boolean> {
   return member.isAdmin || hasAnyRole(member, ORGANISER_ROLES);
 }
 
+/** President, Vice President, Head of Tech, or a dashboard admin: may see, edit and add tasks for anyone. */
+export async function managesAllTasks(member: CommitteeMember): Promise<boolean> {
+  return member.isAdmin || hasAnyRole(member, ASSIGNER_ROLES);
+}
+
 export const ORGANISER_ONLY = 'Only the President, Vice President, Secretary and Head of Tech can do this';

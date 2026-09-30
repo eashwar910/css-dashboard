@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
+import { AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Skeleton } from '@/components/ui/skeleton';
+import { RichTextEditor } from '@/components/RichTextEditor';
 import {
   Dialog,
   DialogContent,
@@ -13,6 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { apiFetch } from '@/lib/api';
 import type { ExternalRelation, ExternalRelationInput, RelationType } from '@/hooks/useExternalRelations';
 
 interface ExternalRelationDialogProps {
@@ -32,16 +36,28 @@ function toAmount(value: string): number | null {
 
 const TYPE_LABEL: Record<RelationType, string> = { sponsor: 'Sponsor', partner: 'Partner', speaker: 'Speaker' };
 
+/** The relation's Notion page body, as /api/event-content returns it. */
+interface NotesContent {
+  editorMarkdown: string;
+  /** Sent back as `base` so a save can't overwrite a newer edit made in Notion. */
+  source: string;
+  truncated: boolean;
+}
+
+type NotesState = { kind: 'loading' } | { kind: 'ready'; content: NotesContent | null } | { kind: 'error' };
+
 /** Add or edit a sponsor, partner or speaker in the Notion External Relations database. */
 export function ExternalRelationDialog({ open, onOpenChange, relation, defaultType = 'sponsor', onSave }: ExternalRelationDialogProps) {
   const { toast } = useToast();
   const [type, setType] = useState<RelationType>('sponsor');
   const [name, setName] = useState('');
   const [valueProvided, setValueProvided] = useState('');
-  const [bountyUsdt, setBountyUsdt] = useState('');
+  const [bountyMyr, setBountyMyr] = useState('');
   const [opsMyr, setOpsMyr] = useState('');
   const [sponsorshipFormUrl, setSponsorshipFormUrl] = useState('');
-  const [proofOfPaymentUrl, setProofOfPaymentUrl] = useState('');
+  const [notes, setNotes] = useState<NotesState>({ kind: 'ready', content: null });
+  /** The edited notes as Markdown; null until the first change. */
+  const [notesDraft, setNotesDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Load the row being edited (or blank fields) each time the dialog opens
@@ -50,17 +66,30 @@ export function ExternalRelationDialog({ open, onOpenChange, relation, defaultTy
     setType(relation?.type ?? defaultType);
     setName(relation?.name ?? '');
     setValueProvided(relation?.valueProvided ?? '');
-    setBountyUsdt(relation?.bountyUsdt?.toString() ?? '');
+    setBountyMyr(relation?.bountyMyr?.toString() ?? '');
     setOpsMyr(relation?.opsMyr?.toString() ?? '');
     setSponsorshipFormUrl(relation?.sponsorshipFormUrl ?? '');
-    setProofOfPaymentUrl(relation?.proofOfPaymentUrl ?? '');
+    setNotesDraft(null);
+    if (!relation) {
+      setNotes({ kind: 'ready', content: null });
+      return;
+    }
+    // Editing: load the notes (the Notion page body)
+    let cancelled = false;
+    setNotes({ kind: 'loading' });
+    apiFetch<NotesContent>(`event-content?id=${encodeURIComponent(relation.id)}`)
+      .then((content) => !cancelled && setNotes({ kind: 'ready', content }))
+      .catch(() => !cancelled && setNotes({ kind: 'error' }));
+    return () => {
+      cancelled = true;
+    };
   }, [open, relation, defaultType]);
 
   const handleOpenChange = (next: boolean) => {
     if (!saving) onOpenChange(next);
   };
 
-  const canSave = name.trim() !== '' && !saving;
+  const canSave = name.trim() !== '' && !saving && notes.kind !== 'loading';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,15 +100,22 @@ export function ExternalRelationDialog({ open, onOpenChange, relation, defaultTy
         ? {
             name: name.trim(),
             type,
-            bountyUsdt: toAmount(bountyUsdt),
+            bountyMyr: toAmount(bountyMyr),
             opsMyr: toAmount(opsMyr),
             sponsorshipFormUrl: sponsorshipFormUrl.trim() || null,
-            proofOfPaymentUrl: proofOfPaymentUrl.trim() || null,
           }
         : { name: name.trim(), type, valueProvided: valueProvided.trim() || null };
+    // New rows get their notes with the row; existing rows save them to the page body below
+    if (!relation && notesDraft?.trim()) input.notes = notesDraft;
     setSaving(true);
     try {
       await onSave(input, relation?.id);
+      if (relation && notesDraft !== null && notes.kind === 'ready' && notes.content) {
+        await apiFetch(`event-content?id=${encodeURIComponent(relation.id)}`, {
+          method: 'PUT',
+          body: JSON.stringify({ markdown: notesDraft, base: notes.content.source }),
+        });
+      }
       toast({ title: relation ? 'Relation updated' : 'Relation added', description: 'Saved to External Relations in Notion.' });
       onOpenChange(false);
     } catch (err) {
@@ -138,8 +174,8 @@ export function ExternalRelationDialog({ open, onOpenChange, relation, defaultTy
               <div className="grid grid-cols-2 gap-4">
                 {field(
                   'rel-bounty',
-                  'Bounty amount (USDT)',
-                  <Input id="rel-bounty" type="number" min="0" step="0.01" value={bountyUsdt} onChange={(e) => setBountyUsdt(e.target.value)} style={{ borderRadius: 0 }} className="h-9 text-xs" />
+                  'Bounty amount (MYR)',
+                  <Input id="rel-bounty" type="number" min="0" step="0.01" value={bountyMyr} onChange={(e) => setBountyMyr(e.target.value)} style={{ borderRadius: 0 }} className="h-9 text-xs" />
                 )}
                 {field(
                   'rel-ops',
@@ -151,12 +187,6 @@ export function ExternalRelationDialog({ open, onOpenChange, relation, defaultTy
                 'rel-form',
                 'Sponsorship form (link)',
                 <Input id="rel-form" type="url" placeholder="https://…" value={sponsorshipFormUrl} onChange={(e) => setSponsorshipFormUrl(e.target.value)} style={{ borderRadius: 0 }} className="h-9 text-xs" />
-              )}
-              {field(
-                'rel-proof',
-                'Proof of payment (link)',
-                <Input id="rel-proof" type="url" placeholder="https://…" value={proofOfPaymentUrl} onChange={(e) => setProofOfPaymentUrl(e.target.value)} style={{ borderRadius: 0 }} className="h-9 text-xs" />,
-                'Add this once the sponsor has paid.'
               )}
             </>
           ) : (
@@ -182,6 +212,33 @@ export function ExternalRelationDialog({ open, onOpenChange, relation, defaultTy
                 : 'What the partner gives the society. Any form: credits, services, venue, prizes…'
             )
           )}
+
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium">Notes</p>
+            {notes.kind === 'loading' ? (
+              <div className="space-y-2">
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-4/5" />
+              </div>
+            ) : notes.kind === 'error' ? (
+              <p className="flex items-center gap-2 text-xs text-destructive">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                Couldn't load the notes. Edit them in Notion, or reopen this to try again.
+              </p>
+            ) : notes.content?.truncated ? (
+              <p className="text-xs text-muted-foreground">These notes are too long to edit here. Edit them in Notion.</p>
+            ) : (
+              <RichTextEditor
+                // Remount when the loaded notes change, so the editor starts from them
+                key={relation?.id ?? 'new'}
+                initialMarkdown={notes.content?.editorMarkdown ?? ''}
+                onChange={setNotesDraft}
+                disabled={saving}
+                label="Notes"
+                placeholder="Payment status, contacts, what was agreed…"
+              />
+            )}
+          </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" size="sm" style={{ borderRadius: 0 }} onClick={() => handleOpenChange(false)} disabled={saving}>

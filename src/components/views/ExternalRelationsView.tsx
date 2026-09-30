@@ -10,16 +10,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { AlertCircle, ExternalLink, Gift, Handshake, Mic, Pencil, Plus, Trash2 } from 'lucide-react';
+import { AlertCircle, ChevronDown, ExternalLink, Gift, Handshake, Mic, Pencil, Plus, Trash2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { PageBody } from '@/components/PageBody';
 import { useToast } from '@/hooks/use-toast';
 import { formatRM } from '@/lib/money';
 import { useExternalRelations, type ExternalRelation } from '@/hooks/useExternalRelations';
 import { ExternalRelationDialog } from '@/components/ExternalRelationDialog';
 
-const usdt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
-
-function formatUsdt(amount: number | null) {
-  return amount === null ? '—' : `${usdt.format(amount)} USDT`;
+function formatBounty(amount: number | null) {
+  return amount === null ? '—' : formatRM(amount);
 }
 
 function sum(values: (number | null)[]) {
@@ -42,6 +42,30 @@ function DocLink({ href, label }: { href: string | null; label: string }) {
       <ExternalLink className="h-3 w-3 shrink-0" />
       {label}
     </a>
+  );
+}
+
+/** "Notes" toggle that opens the relation's Notion page body, read and edit in place. */
+function RowNotes({ relation, version }: { relation: ExternalRelation; version: number }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-primary"
+      >
+        <ChevronDown className={cn('h-3 w-3 transition-transform', !open && '-rotate-90')} />
+        Notes
+      </button>
+      {open && (
+        <div className="mt-2 border-l-2 border-border pl-3">
+          {/* Remount after the edit dialog closes, so notes saved there show */}
+          <PageBody key={version} pageId={relation.id} notionUrl={relation.url} noun="Notes" />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -87,6 +111,7 @@ export function ExternalRelationsView() {
   const [editing, setEditing] = useState<ExternalRelation | null>(null);
   const [deleting, setDeleting] = useState<ExternalRelation | null>(null);
   const [deletePending, setDeletePending] = useState(false);
+  const [notesVersion, setNotesVersion] = useState(0);
 
   const openAdd = () => {
     setEditing(null);
@@ -157,7 +182,7 @@ export function ExternalRelationsView() {
               meta={
                 isLoading
                   ? 'Loading...'
-                  : `${sponsors.length} · ${formatUsdt(sum(sponsors.map((s) => s.bountyUsdt)))} bounty · ${formatRM(sum(sponsors.map((s) => s.opsMyr)))} ops`
+                  : `${sponsors.length} · ${formatBounty(sum(sponsors.map((s) => s.bountyMyr)))} bounty · ${formatRM(sum(sponsors.map((s) => s.opsMyr)))} ops`
               }
             />
             {isLoading ? (
@@ -173,14 +198,16 @@ export function ExternalRelationsView() {
                       <h3 className="text-sm font-medium text-foreground">{s.name}</h3>
                       <div className="mt-1.5 grid gap-x-8 gap-y-1 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
                         <span>
-                          Bounty: <span className="text-foreground">{formatUsdt(s.bountyUsdt)}</span>
+                          Bounty: <span className="text-foreground">{formatBounty(s.bountyMyr)}</span>
                         </span>
                         <span>
                           Ops: <span className="text-foreground">{s.opsMyr === null ? '—' : formatRM(s.opsMyr)}</span>
                         </span>
                         <DocLink href={s.sponsorshipFormUrl} label="Sponsorship form" />
-                        <DocLink href={s.proofOfPaymentUrl} label="Proof of payment" />
+                        {/* Replaced by notes; older rows may still have a link */}
+                        {s.proofOfPaymentUrl && <DocLink href={s.proofOfPaymentUrl} label="Proof of payment" />}
                       </div>
+                      <RowNotes relation={s} version={notesVersion} />
                     </div>
                     <RowActions relation={s} onEdit={() => openEdit(s)} onDelete={() => setDeleting(s)} />
                   </article>
@@ -206,6 +233,7 @@ export function ExternalRelationsView() {
                       <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
                         {p.valueProvided ?? 'Value provided not added yet.'}
                       </p>
+                      <RowNotes relation={p} version={notesVersion} />
                     </div>
                     <RowActions relation={p} onEdit={() => openEdit(p)} onDelete={() => setDeleting(p)} />
                   </article>
@@ -231,6 +259,7 @@ export function ExternalRelationsView() {
                       <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
                         {sp.valueProvided ?? 'Talk details not added yet.'}
                       </p>
+                      <RowNotes relation={sp} version={notesVersion} />
                     </div>
                     <RowActions relation={sp} onEdit={() => openEdit(sp)} onDelete={() => setDeleting(sp)} />
                   </article>
@@ -259,7 +288,15 @@ export function ExternalRelationsView() {
         </>
       )}
 
-      <ExternalRelationDialog open={dialogOpen} onOpenChange={setDialogOpen} relation={editing} onSave={save} />
+      <ExternalRelationDialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) setNotesVersion((v) => v + 1);
+        }}
+        relation={editing}
+        onSave={save}
+      />
 
       <AlertDialog open={deleting !== null} onOpenChange={(open) => !open && !deletePending && setDeleting(null)}>
         <AlertDialogContent style={{ borderRadius: 0 }} className="border-border">

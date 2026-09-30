@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -36,8 +35,6 @@ import {
   Users,
   Briefcase,
   Presentation,
-  Search,
-  X,
   AlertCircle,
   Trash2,
   HardDrive,
@@ -84,17 +81,17 @@ type ScheduleItem = { kind: 'event'; item: Event } | { kind: 'meeting'; item: Me
 
 export interface HomeViewProps {
   onNavigate?: (view: View) => void;
+  /** The navbar search box's text; results show at the top of Home. */
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 }
 
-export function HomeView({ onNavigate }: HomeViewProps = {}) {
+export function HomeView({ onNavigate, searchQuery = '', onSearchChange }: HomeViewProps = {}) {
   const { upcoming: upcomingEvents, tba: tbaEvents, data: allEvents, isLoading: eventsLoading, error: eventsError, deleteEvent, canDelete } = useEvents();
   const { upcoming: upcomingMeetings, isLoading: meetingsLoading, error: meetingsError } = useMeetings();
   const { data: documents, byCategory: docsByCategory, isLoading: docsLoading, error: docsError, addDocument } = useDocuments();
   const [addDocOpen, setAddDocOpen] = useState(false);
   const { data: teamMembers } = useTeamMembers();
-
-  // Search input state
-  const [searchQuery, setSearchQuery] = useState('');
 
   // Event shown in the detail dialog
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
@@ -154,33 +151,6 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
   return (
     <div className="space-y-12 sm:space-y-14">
 
-      {/* ── Search ───────────────────────────────────────────────────── */}
-      <header className="border-b border-border pb-6">
-        <div className="flex justify-end">
-          {/* Search input filtering across events, documents, members */}
-          <div className="relative w-full sm:w-72">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search events, docs, members..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ borderRadius: 0 }}
-              className="h-9 border-border bg-background pl-8 pr-7 text-xs placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                aria-label="Clear search"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
-
       {/* ── Search Results Panel (conditionally shown) ──────────────── */}
       {searchResults && (
         <section className="border border-border bg-muted/10 p-4 sm:p-5 space-y-4">
@@ -193,7 +163,7 @@ export function HomeView({ onNavigate }: HomeViewProps = {}) {
                 {searchResults.total} {searchResults.total === 1 ? 'match' : 'matches'}
               </span>
               <button
-                onClick={() => setSearchQuery('')}
+                onClick={() => onSearchChange?.('')}
                 className="text-xs text-muted-foreground hover:text-foreground underline"
               >
                 Clear

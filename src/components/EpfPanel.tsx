@@ -1,16 +1,42 @@
 import { useRef, useState } from 'react';
 import { format } from 'date-fns';
-import { ExternalLink, FileCheck2, Upload } from 'lucide-react';
+import { ExternalLink, FileCheck2, Trash2, Upload } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { MAX_EPF_BYTES, useEpfs } from '@/hooks/useEpfs';
+import { MAX_EPF_BYTES, useEpfs, type Epf } from '@/hooks/useEpfs';
 
-/** The event's EPFs (newest first) and an upload button. Events only, not meetings. */
+/** The event's EPFs (newest first), with upload and remove. Events only, not meetings. */
 export function EpfPanel({ eventId }: { eventId: string }) {
-  const { byEvent, isLoading, uploadEpf } = useEpfs();
+  const { byEvent, isLoading, uploadEpf, deleteEpf } = useEpfs();
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [removing, setRemoving] = useState<Epf | null>(null);
+  const [removePending, setRemovePending] = useState(false);
   const epfs = byEvent[eventId] ?? [];
+
+  const handleRemove = async () => {
+    if (!removing) return;
+    setRemovePending(true);
+    try {
+      await deleteEpf(removing.id);
+      toast({ title: 'EPF removed', description: "Moved to Notion's trash." });
+      setRemoving(null);
+    } catch (err) {
+      toast({ title: "Couldn't remove EPF", description: (err as Error).message, variant: 'destructive' });
+    } finally {
+      setRemovePending(false);
+    }
+  };
 
   const handleFile = async (file: File | undefined) => {
     if (inputRef.current) inputRef.current.value = '';
@@ -56,22 +82,59 @@ export function EpfPanel({ eventId }: { eventId: string }) {
       ) : (
         <ul className="mt-2 divide-y divide-border">
           {epfs.map((epf, i) => (
-            <li key={epf.id}>
+            <li key={epf.id} className="flex items-center gap-1">
               <a
                 href={epf.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group flex items-center gap-2 py-1.5 text-xs transition-colors hover:text-primary"
+                className="group flex min-w-0 flex-1 items-center gap-2 py-1.5 text-xs transition-colors hover:text-primary"
               >
                 <span className="min-w-0 flex-1 truncate">{epf.fileName ?? epf.name}</span>
                 {i === 0 && epfs.length > 1 && <span className="text-[10px] uppercase tracking-wider text-primary">Latest</span>}
                 <span className="shrink-0 text-muted-foreground">{format(new Date(epf.uploadedAt), 'MMM d')}</span>
                 <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground group-hover:text-primary" />
               </a>
+              <button
+                type="button"
+                onClick={() => setRemoving(epf)}
+                title="Remove EPF"
+                aria-label={`Remove ${epf.fileName ?? epf.name}`}
+                className="shrink-0 p-1 text-muted-foreground transition-colors hover:text-destructive"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
             </li>
           ))}
         </ul>
       )}
+
+      <AlertDialog open={removing !== null} onOpenChange={(open) => !open && !removePending && setRemoving(null)}>
+        <AlertDialogContent style={{ borderRadius: 0 }} className="border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-serif text-lg font-semibold">Remove EPF</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs text-muted-foreground">
+              &ldquo;{removing?.fileName ?? removing?.name}&rdquo; will be moved to Notion&apos;s trash. It can be restored from the trash in Notion for 30 days.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4 gap-2">
+            <AlertDialogCancel style={{ borderRadius: 0 }} disabled={removePending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              style={{ borderRadius: 0 }}
+              disabled={removePending}
+              onClick={(e) => {
+                // Keep the dialog open until Notion confirms
+                e.preventDefault();
+                void handleRemove();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {removePending ? 'Removing…' : 'Remove'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -9,6 +9,7 @@ export type TaskAction = 'toggle' | 'edit' | 'delete';
 
 export type OwnershipReason =
   | 'admin' // committee_members.is_admin: always allowed
+  | 'task-manager' // President, Vice President or Head of Tech: always allowed
   | 'pic' // the member is one of the task's PIC people
   | 'unassigned-toggle' // no individual PIC; anyone may tick/untick
   | 'unassigned-admin-only' // no individual PIC; edit/delete needs admin
@@ -25,11 +26,14 @@ export interface OwnershipDecision {
 export const TASK_PIC_PROPERTY = 'PIC';
 
 export function canModifyTask(
-  member: Pick<CommitteeMember, 'email' | 'notionEmail' | 'isAdmin'>,
+  member: Pick<CommitteeMember, 'email' | 'notionEmail' | 'isAdmin'> & { managesAllTasks?: boolean },
   taskPage: Pick<PageObjectResponse, 'properties'>,
   action: TaskAction,
 ): OwnershipDecision {
   if (member.isAdmin) return { allowed: true, reason: 'admin', message: 'Admins can change any task' };
+  if (member.managesAllTasks) {
+    return { allowed: true, reason: 'task-manager', message: 'The President, Vice President and Head of Tech can change any task' };
+  }
 
   const pic = people(taskPage, TASK_PIC_PROPERTY);
   const myEmails = new Set([member.email, member.notionEmail].filter(Boolean).map((e) => e!.toLowerCase()));
