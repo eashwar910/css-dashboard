@@ -38,6 +38,7 @@ import {
   AlertCircle,
   Trash2,
   HardDrive,
+  CalendarDays,
   Plus,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -73,6 +74,12 @@ const PINNED_LINKS = [
     name: 'Google Drive',
     url: 'https://drive.google.com/drive/folders/1XO-T3__mMU5ibk8MICyYNTNMO3lT0ZfP?usp=sharing',
     icon: HardDrive,
+  },
+  {
+    id: 'css-weeklies',
+    name: 'CSS Weeklies',
+    url: 'https://cssweeklies.vercel.app',
+    icon: CalendarDays,
   },
 ];
 
