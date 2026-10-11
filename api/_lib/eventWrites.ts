@@ -22,6 +22,26 @@ export interface EventCreate {
   end?: unknown;
   location?: unknown;
   status?: unknown;
+  /** Sub-events: the project they belong to and the stage they're under. */
+  project?: unknown;
+  stage?: unknown;
+}
+
+/** `Project` options a sub-event may belong to. */
+const PROJECTS = ['Gilbot'];
+
+function parseProject(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (PROJECTS.includes(value as string)) return value as string;
+  throw new HttpError(400, `Project must be one of: ${PROJECTS.join(', ')}`);
+}
+
+/** A `Project Status` tag; a new name adds the option in Notion. */
+function parseProjectStatus(value: unknown): string | null {
+  if (value === null || value === '') return null;
+  if (typeof value !== 'string' || !value.trim() || value.length > 100) throw new HttpError(400, 'Status must be text of 100 characters or fewer');
+  if (value.includes(',')) throw new HttpError(400, "Status can't contain commas");
+  return value.trim();
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -77,6 +97,8 @@ export async function createEvent(input: EventCreate): Promise<EventDto> {
   const timeline = parseTimeline(input.start, input.end);
   const location = parseLocation(input.location);
   const status = parseStatus(input.status);
+  const project = parseProject(input.project);
+  const stage = input.stage === undefined ? null : parseStage(input.stage);
 
   const page = await notion().pages.create({
     parent: { type: 'data_source_id', data_source_id: dataSourceId('events') },
@@ -85,6 +107,8 @@ export async function createEvent(input: EventCreate): Promise<EventDto> {
       Timeline: write.date(timeline.start, timeline.end),
       Location: write.richText(location),
       Status: write.status(NOTION_STATUS[status]),
+      ...(project ? { Project: write.select(project) } : {}),
+      ...(stage ? { Stage: write.select(stage) } : {}),
     },
   });
   cacheInvalidate('events:');
@@ -100,6 +124,7 @@ export interface EventEdit {
   end?: unknown;
   location?: unknown;
   stage?: unknown;
+  projectStatus?: unknown;
 }
 
 function parseStage(value: unknown): string | null {
@@ -122,6 +147,7 @@ export async function updateEvent(id: string, edit: EventEdit): Promise<EventDto
   }
   if ('location' in edit) properties.Location = write.richText(parseLocation(edit.location));
   if ('stage' in edit) properties.Stage = write.select(parseStage(edit.stage));
+  if ('projectStatus' in edit) properties['Project Status'] = write.select(parseProjectStatus(edit.projectStatus));
   if (!Object.keys(properties).length) throw new HttpError(400, 'Nothing to update');
 
   if (!(await retrievePageIn('events', id))) throw new HttpError(404, 'Event not found');

@@ -19,6 +19,8 @@ type EventDto = EventsResponse['events'][number];
 interface EventsResponse {
   /** Organisers may delete events. */
   canDelete: boolean;
+  /** Every Notion `Project Status` option. */
+  projectStatuses: string[];
   events: {
     id: string;
     title: string;
@@ -28,6 +30,8 @@ interface EventsResponse {
     location: string | null;
     status: EventStatus | null;
     stage: string | null;
+    project: string | null;
+    projectStatus: string | null;
     url: string;
   }[];
 }
@@ -46,16 +50,18 @@ function toEvent(dto: EventDto): Event {
     rsvpCount: 0,
     status: dto.status ?? undefined,
     stage: dto.stage ?? undefined,
+    project: dto.project ?? undefined,
+    projectStatus: dto.projectStatus ?? undefined,
     notionUrl: dto.url,
     todos: [],
     financeItems: [],
   };
 }
 
-const store = createApiStore<EventsResponse, { events: Event[]; canDelete: boolean }>(
+const store = createApiStore<EventsResponse, { events: Event[]; canDelete: boolean; projectStatuses: string[] }>(
   'events',
-  (res) => ({ events: res.events.map(toEvent), canDelete: res.canDelete }),
-  { events: [], canDelete: false }
+  (res) => ({ events: res.events.map(toEvent), canDelete: res.canDelete, projectStatuses: res.projectStatuses }),
+  { events: [], canDelete: false, projectStatuses: [] }
 );
 
 function updateEvents(fn: (events: Event[]) => Event[]) {
@@ -69,6 +75,9 @@ export interface NewEvent {
   end: string | null;
   location: string | null;
   status: EventStatus;
+  /** Sub-events: the project and the stage they sit under. */
+  project?: string;
+  stage?: string;
 }
 
 /** Event edits. start null = TBA; send start and end together. */
@@ -80,6 +89,8 @@ export interface EventEdit {
   location?: string | null;
   /** One of EVENT_STAGES, or null to clear. */
   stage?: string | null;
+  /** A Project Status tag; a new name adds the option in Notion. null clears. */
+  projectStatus?: string | null;
 }
 
 export interface EventsResult extends AsyncResult<Event[]> {
@@ -101,6 +112,8 @@ export interface EventsResult extends AsyncResult<Event[]> {
   deleteEvent: (id: string) => Promise<void>;
   /** The signed-in member is an organiser and may delete events. */
   canDelete: boolean;
+  /** Every Notion `Project Status` option, for a project page's status picker. */
+  projectStatuses: string[];
 }
 
 export function useEvents(): EventsResult {
@@ -129,7 +142,12 @@ export function useEvents(): EventsResult {
       body: JSON.stringify(edit),
     });
     const event = toEvent(dto);
-    updateEvents((events) => events.map((e) => (e.id === id ? event : e)));
+    store.update((v) => ({
+      ...v,
+      events: v.events.map((e) => (e.id === id ? event : e)),
+      // A new status tag is now a Notion option too
+      projectStatuses: dto.projectStatus && !v.projectStatuses.includes(dto.projectStatus) ? [...v.projectStatuses, dto.projectStatus] : v.projectStatuses,
+    }));
     return event;
   }, []);
 
@@ -185,5 +203,6 @@ export function useEvents(): EventsResult {
     rsvpEvent,
     deleteEvent,
     canDelete: value.canDelete,
+    projectStatuses: value.projectStatuses,
   };
 }

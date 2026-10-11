@@ -241,6 +241,11 @@ export function EventsView() {
               ) : (
                 epfsKnown && <NoEpfBadge />
               )}
+              {event.project && (
+                <Badge variant="outline" className="border-primary/40 text-[10px] text-primary">
+                  {event.project}
+                </Badge>
+              )}
               {event.status && (
                 <Badge variant="outline" className="text-[10px]">
                   {STATUS_LABELS[event.status]}

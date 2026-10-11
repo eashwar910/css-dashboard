@@ -20,12 +20,10 @@ import { EventDetailsEditor, EventFinancePanel, EventStatusPicker, EventTodoPane
 import { useEvents } from '@/hooks/useEvents';
 import { useExternalRelations, type ExternalRelation, type Project } from '@/hooks/useExternalRelations';
 import { useToast } from '@/hooks/use-toast';
-import { formatEventDateRange, formatEventTimeRange, isTba } from '@/lib/eventDates';
+import { formatEventDateRange, formatEventTimeRange, isTba, STAGES } from '@/lib/eventDates';
 import { formatRM } from '@/lib/money';
 import type { Event } from '@/lib/types';
 
-/** Notion `Stage` options on Events, in order (kept in step with api/_lib/events.ts). */
-const STAGES = ['Ideation', 'Sponsor discovery', 'Sponsor outreach', 'Planning', 'Execution', 'Wrap-up'];
 
 const TYPE_LABEL = { sponsor: 'Sponsor', partner: 'Partner', speaker: 'Speaker' } as const;
 
@@ -34,7 +32,7 @@ function sponsorTotal(r: ExternalRelation): number | null {
   return r.bountyMyr === null && r.opsMyr === null ? null : (r.bountyMyr ?? 0) + (r.opsMyr ?? 0);
 }
 
-function SectionHeader({ title, meta, action }: { title: string; meta?: string; action?: React.ReactNode }) {
+export function SectionHeader({ title, meta, action }: { title: string; meta?: string; action?: React.ReactNode }) {
   return (
     <div className="mb-4 flex items-baseline justify-between gap-3 border-b border-border pb-2">
       <h2 className="font-serif text-lg font-semibold">{title}</h2>
@@ -47,7 +45,7 @@ function SectionHeader({ title, meta, action }: { title: string; meta?: string; 
 }
 
 /** Stage stepper: earlier stages read as done, the current one is filled. Click to move. */
-function StagePicker({ event }: { event: Event }) {
+export function StagePicker({ event }: { event: Event }) {
   const { saveEvent } = useEvents();
   const { toast } = useToast();
   const current = event.stage ? STAGES.indexOf(event.stage) : -1;
@@ -95,7 +93,7 @@ function StagePicker({ event }: { event: Event }) {
 }
 
 /** Sponsors (and any partners or speakers) tagged with this project in External Relations. */
-function SponsorTracker({ project }: { project: Project }) {
+export function SponsorTracker({ project }: { project: Project }) {
   const { data: relations, isLoading, error, save, remove } = useExternalRelations();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -245,7 +243,7 @@ function SponsorTracker({ project }: { project: Project }) {
 }
 
 /**
- * One page for a flagship event (Gilbot, NottsHack): its Events row (status,
+ * One page for a flagship event (NottsHack; Gilbot has GilbotView): its Events row (status,
  * stage, overview, to-dos, finance, EPF) plus its sponsors from External Relations.
  */
 export function FlagshipView({ project, match, blurb }: { project: Project; match: RegExp; blurb: string }) {

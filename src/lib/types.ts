@@ -118,6 +118,10 @@ export interface Event {
   status?: EventStatus;
   /** Notion `Stage` (e.g. "Sponsor discovery"); undefined when unset. */
   stage?: string;
+  /** Notion `Project` (e.g. "Gilbot") on a project's sub-events. */
+  project?: string;
+  /** Notion `Project Status`: a project page's status tag. */
+  projectStatus?: string;
   /** Link to the event's Notion page. */
   notionUrl?: string;
   /** Per-event to-do items */

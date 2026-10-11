@@ -2,7 +2,7 @@
 // database (meetings.ts) and never appear here.
 
 import type { PageObjectResponse } from '@notionhq/client';
-import { cached, dataSourceId, queryAll } from './notion.js';
+import { cached, dataSourceId, notion, queryAll } from './notion.js';
 import { date, richText, select, status, title, type DateValue } from './props.js';
 
 export type EventStatusDto = 'scheduled' | 'planning-in-progress' | 'done';
@@ -23,6 +23,10 @@ export interface EventDto {
   status: EventStatusDto | null;
   /** `Stage` option name, or null when unset. */
   stage: string | null;
+  /** `Project` (e.g. "Gilbot"): set on a project's sub-events. */
+  project: string | null;
+  /** `Project Status`: the free-form status tag a project page shows. */
+  projectStatus: string | null;
   /** The Notion page, for "Open in Notion" links. */
   url: string;
 }
@@ -50,6 +54,8 @@ export function toEvent(page: PageObjectResponse): EventDto {
     location: richText(page, 'Location'),
     status: notionStatus ? STATUS_MAP[notionStatus] ?? null : null,
     stage: select(page, 'Stage'),
+    project: select(page, 'Project'),
+    projectStatus: select(page, 'Project Status'),
     url: page.url,
   };
 }
@@ -68,4 +74,13 @@ export async function eventPages(): Promise<PageObjectResponse[]> {
 
 export async function loadEvents(): Promise<EventDto[]> {
   return (await eventPages()).map(toEvent).sort(compareByStart);
+}
+
+/** Every `Project Status` option, including ones no event uses yet. */
+export async function loadProjectStatuses(): Promise<string[]> {
+  return cached('events:projectStatuses', async () => {
+    const source = await notion().dataSources.retrieve({ data_source_id: dataSourceId('events') });
+    const prop = 'properties' in source ? source.properties['Project Status'] : undefined;
+    return prop?.type === 'select' ? prop.select.options.map((o) => o.name) : [];
+  });
 }

@@ -28,8 +28,14 @@ export function isTba(event: Pick<Event, 'startDateTime'>): boolean {
   return eventStart(event) === null;
 }
 
-/** Gilbot is a project, not an event: its Events row backs the Gilbot tab and is left out of event lists. */
-export const PROJECT_MATCH = /gil+bot/i;
+/** Notion `Stage` options on Events, in order (kept in step with api/_lib/events.ts). */
+export const STAGES = ['Ideation', 'Sponsor discovery', 'Sponsor outreach', 'Planning', 'Execution', 'Wrap-up'];
+
+/**
+ * Gilbot is a project, not an event: its Events row (named just "Gilbot") backs
+ * the Gilbot tab and is left out of event lists. Its sub-events are listed.
+ */
+export const PROJECT_MATCH = /^\s*gil+bot\s*$/i;
 export function isProject(event: Pick<Event, 'title'>): boolean {
   return PROJECT_MATCH.test(event.title);
 }
