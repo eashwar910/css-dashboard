@@ -4,6 +4,7 @@
 import type { PageObjectResponse } from '@notionhq/client';
 import type { CommitteeMember } from './auth.js';
 import { eventPages } from './events.js';
+import { loadRoster } from './meetings.js';
 import { canModifyTask } from './ownership.js';
 import { cached, dataSourceId, queryAll } from './notion.js';
 import { date, people, relationIds, status, title } from './props.js';
@@ -174,10 +175,18 @@ export async function taskContext(now = new Date()) {
   };
 }
 
+/** Show PICs by their roster name, not their Notion account name (Notion "wen" → "Quek Jia Wen"). */
+export async function withRosterNames(...tasks: TaskDto[]): Promise<TaskDto[]> {
+  const names = new Map((await loadRoster()).filter((r) => r.notionUserId).map((r) => [r.notionUserId!, r.name]));
+  for (const t of tasks) for (const a of t.assignees) a.name = names.get(a.id) ?? a.name;
+  return tasks;
+}
+
 export async function loadTasks(member: TaskViewer, now = new Date()) {
   const [pages, { eventNames, week }] = await Promise.all([taskPages(), taskContext(now)]);
+  const tasks = await withRosterNames(...pages.map((p) => toTask(p, member, eventNames, week)));
   return {
-    tasks: pages.map((p) => toTask(p, member, eventNames, week)).sort(compareTasks),
+    tasks: tasks.sort(compareTasks),
     weekStart: week.start.toISOString(),
     weekEnd: week.end.toISOString(),
   };

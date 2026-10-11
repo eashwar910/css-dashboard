@@ -9,7 +9,7 @@ import { cacheInvalidate, dataSourceId, notion, retrievePageIn } from './notion.
 import { canModifyTask, type TaskAction } from './ownership.js';
 import { date, write } from './props.js';
 import { managesAllTasks } from './roles.js';
-import { klMonday, taskContext, toTask, type TaskDto, type TaskStatusDto, type TaskViewer } from './tasks.js';
+import { klMonday, taskContext, toTask, withRosterNames, type TaskDto, type TaskStatusDto, type TaskViewer } from './tasks.js';
 import { notionUserIdFor } from './users.js';
 
 /** Dashboard status → exact Notion `Status` option (NOTION_MAPPING.md). */
@@ -70,7 +70,7 @@ async function toDto(member: CommitteeMember, pageId: string): Promise<TaskDto> 
   const page = await retrievePageIn('tasks', pageId);
   if (!page) throw new HttpError(404, 'Task not found after update');
   const [{ eventNames, week }, viewer] = await Promise.all([taskContext(), viewerFor(member)]);
-  return toTask(page, viewer, eventNames, week);
+  return (await withRosterNames(toTask(page, viewer, eventNames, week)))[0];
 }
 
 // ── Writes ───────────────────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ export async function setTaskCompleted(member: CommitteeMember, taskId: string, 
   // The update returns the page, so skip re-reading it when it's complete.
   if (!isFullPage(updated)) return toDto(member, taskId);
   const [{ eventNames, week }, viewer] = await Promise.all([context, viewerFor(member)]);
-  return toTask(updated, viewer, eventNames, week);
+  return (await withRosterNames(toTask(updated, viewer, eventNames, week)))[0];
 }
 
 export interface TaskEdit {
