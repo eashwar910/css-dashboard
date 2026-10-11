@@ -28,7 +28,7 @@ export interface EventCreate {
 }
 
 /** `Project` options a sub-event may belong to. */
-const PROJECTS = ['Gilbot'];
+const PROJECTS = ['Gilbot', 'NottsHack'];
 
 function parseProject(value: unknown): string | null {
   if (value === undefined || value === null || value === '') return null;

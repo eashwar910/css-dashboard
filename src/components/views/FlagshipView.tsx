@@ -13,14 +13,15 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { DetailFacts } from '@/components/DetailFacts';
+import { SectionHeader } from '@/components/SectionHeader';
 import { PageBody } from '@/components/PageBody';
-import { EpfPanel } from '@/components/EpfPanel';
+import { SubEvents } from '@/components/SubEvents';
 import { ExternalRelationDialog } from '@/components/ExternalRelationDialog';
 import { EventDetailsEditor, EventFinancePanel, EventStatusPicker, EventTodoPanel } from '@/components/views/EventsView';
 import { useEvents } from '@/hooks/useEvents';
 import { useExternalRelations, type ExternalRelation, type Project } from '@/hooks/useExternalRelations';
 import { useToast } from '@/hooks/use-toast';
-import { formatEventDateRange, formatEventTimeRange, isTba, STAGES } from '@/lib/eventDates';
+import { compareEvents, formatEventDateRange, formatEventTimeRange, isTba, STAGES } from '@/lib/eventDates';
 import { formatRM } from '@/lib/money';
 import type { Event } from '@/lib/types';
 
@@ -32,17 +33,6 @@ function sponsorTotal(r: ExternalRelation): number | null {
   return r.bountyMyr === null && r.opsMyr === null ? null : (r.bountyMyr ?? 0) + (r.opsMyr ?? 0);
 }
 
-export function SectionHeader({ title, meta, action }: { title: string; meta?: string; action?: React.ReactNode }) {
-  return (
-    <div className="mb-4 flex items-baseline justify-between gap-3 border-b border-border pb-2">
-      <h2 className="font-serif text-lg font-semibold">{title}</h2>
-      <div className="flex items-center gap-3">
-        {meta && <span className="text-xs text-muted-foreground">{meta}</span>}
-        {action}
-      </div>
-    </div>
-  );
-}
 
 /** Stage stepper: earlier stages read as done, the current one is filled. Click to move. */
 export function StagePicker({ event }: { event: Event }) {
@@ -244,17 +234,21 @@ export function SponsorTracker({ project }: { project: Project }) {
 
 /**
  * One page for a flagship event (NottsHack; Gilbot has GilbotView): its Events row (status,
- * stage, overview, to-dos, finance, EPF) plus its sponsors from External Relations.
+ * stage, overview, to-dos, finance) plus its sponsors from External Relations, and
+ * sub-events by stage (each with its EPF).
  */
 export function FlagshipView({ project, match, blurb }: { project: Project; match: RegExp; blurb: string }) {
   const { data: events, isLoading, error, createEvent } = useEvents();
   const { toast } = useToast();
   const [editingDetails, setEditingDetails] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [tab, setTab] = useState<'overview' | 'subevents'>('overview');
 
   // shortcut: the event is found by name; if several match (e.g. NottsHack'27 and '28), the first not done wins.
-  const matches = events.filter((e) => match.test(e.title));
+  // Its sub-events (Project set) never count, even when their names match.
+  const matches = events.filter((e) => !e.project && match.test(e.title));
   const event = matches.find((e) => e.status !== 'done') ?? matches[matches.length - 1];
+  const subEvents = events.filter((e) => e.project === project).sort(compareEvents);
 
   const create = async () => {
     setCreating(true);
@@ -268,7 +262,7 @@ export function FlagshipView({ project, match, blurb }: { project: Project; matc
   };
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       <header className="border-b border-border pb-6">
         <div className="flex items-start gap-2">
           <h1 className="font-serif text-3xl font-semibold leading-tight sm:text-4xl">{event?.title ?? project}</h1>
@@ -318,35 +312,57 @@ export function FlagshipView({ project, match, blurb }: { project: Project; matc
         </div>
       ) : (
         <>
-          <section className="space-y-5">
-            <DetailFacts
-              facts={[
-                { icon: CalendarDays, label: 'Date', value: formatEventDateRange(event, 'EEE, MMM d, yyyy') },
-                ...(isTba(event) ? [] : [{ icon: Clock, label: 'Time', value: formatEventTimeRange(event) }]),
-                { icon: MapPin, label: 'Location', value: event.location ?? <span className="font-normal text-muted-foreground">Not set</span> },
-              ]}
-            />
-            {editingDetails && <EventDetailsEditor event={event} onDone={() => setEditingDetails(false)} />}
-            <EventStatusPicker event={event} />
-            <StagePicker event={event} />
-          </section>
-
-          <SponsorTracker project={project} />
-
-          <section>
-            <SectionHeader title="Overview" />
-            <PageBody key={event.id} pageId={event.id} notionUrl={event.notionUrl} noun="Overview" />
-          </section>
-
-          <div className="grid gap-10 lg:grid-cols-2">
-            <section>
-              <EventTodoPanel eventId={event.id} />
-            </section>
-            <section className="space-y-6">
-              <EventFinancePanel eventId={event.id} />
-              <EpfPanel eventId={event.id} />
-            </section>
+          <div className="flex border-b border-border">
+            {(['overview', 'subevents'] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                aria-pressed={tab === t}
+                className={cn(
+                  '-mb-px border-b-2 px-4 py-2 text-xs font-semibold tracking-wide transition-colors',
+                  tab === t ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {t === 'overview' ? 'Overview' : `Sub-events (${subEvents.length})`}
+              </button>
+            ))}
           </div>
+
+          {tab === 'subevents' ? (
+            <SubEvents project={project} subEvents={subEvents} />
+          ) : (
+            <>
+            <section className="space-y-5">
+              <DetailFacts
+                facts={[
+                  { icon: CalendarDays, label: 'Date', value: formatEventDateRange(event, 'EEE, MMM d, yyyy') },
+                  ...(isTba(event) ? [] : [{ icon: Clock, label: 'Time', value: formatEventTimeRange(event) }]),
+                  { icon: MapPin, label: 'Location', value: event.location ?? <span className="font-normal text-muted-foreground">Not set</span> },
+                ]}
+              />
+              {editingDetails && <EventDetailsEditor event={event} onDone={() => setEditingDetails(false)} />}
+              <EventStatusPicker event={event} />
+              <StagePicker event={event} />
+            </section>
+
+            <SponsorTracker project={project} />
+
+            <section>
+              <SectionHeader title="Overview" />
+              <PageBody key={event.id} pageId={event.id} notionUrl={event.notionUrl} noun="Overview" />
+            </section>
+
+            <div className="grid gap-10 lg:grid-cols-2">
+              <section>
+                <EventTodoPanel eventId={event.id} />
+              </section>
+              <section>
+                <EventFinancePanel eventId={event.id} />
+              </section>
+            </div>
+            </>
+          )}
         </>
       )}
     </div>
