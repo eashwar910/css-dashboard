@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { addDays, differenceInCalendarDays, eachMonthOfInterval, eachWeekOfInterval, format, startOfDay } from 'date-fns';
+import { addDays, differenceInCalendarDays, eachMonthOfInterval, eachWeekOfInterval, format, isSameMonth, startOfDay } from 'date-fns';
 import { CalendarDays, Clock, FileCheck2, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -8,43 +8,49 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/h
 import { DetailFacts } from '@/components/DetailFacts';
 import { NoEpfBadge } from '@/components/NoEpfBadge';
 import type { Event, EventStatus } from '@/lib/types';
-import { eventStart, formatEventDate, formatEventDateRange, formatEventTimeRange } from '@/lib/eventDates';
+import { eventEnd, eventStart, formatEventDate, formatEventDateRange, formatEventTimeRange } from '@/lib/eventDates';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EventTimeline
 //
-// The academic year (Sep 15 2026 – May 31 2027) as one horizontal line that
-// fits the page, with a dot per dated event. Hovering the line magnifies the
-// weeks around the cursor (a fisheye), so crowded stretches spread out and
-// their labels fit. Hovering a dot shows the event's details; clicking opens
-// the full event dialog. TBA events have no place on the line.
+// The academic year (Sep 15 2026 – May 31 2027) across the page, one column per
+// month, with a dot per dated event on a line that fills up to today. Hovering
+// (or tabbing into) a month widens it so its events have room for their names.
+// Hovering an event shows its details; clicking opens the full event dialog.
+// TBA events have no place on the line.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const RANGE_START = new Date(2026, 8, 15);
 const RANGE_END = new Date(2027, 4, 31);
-const TOTAL_DAYS = differenceInCalendarDays(RANGE_END, RANGE_START) + 1;
 
-const PAD_X = 24;
-/** Below this the line scrolls sideways instead of squeezing further (phones). */
+const dayOf = (date: Date) => differenceInCalendarDays(date, RANGE_START);
+
+const MONTHS = eachMonthOfInterval({ start: RANGE_START, end: RANGE_END }).map((m, i, all) => {
+  const start = i === 0 ? RANGE_START : m;
+  const end = i === all.length - 1 ? RANGE_END : addDays(all[i + 1], -1);
+  return {
+    date: m,
+    startDay: dayOf(start),
+    days: differenceInCalendarDays(end, start) + 1,
+    mondays: eachWeekOfInterval({ start, end }, { weekStartsOn: 1 }).filter((w) => w >= start),
+  };
+});
+type Month = (typeof MONTHS)[number];
+
+/** A short first month still gets enough room for its name. */
+const weight = (m: Month) => Math.max(m.days, 24);
+/** How much wider the hovered month gets. */
+const ZOOM = 3.5;
+/** Below this the timeline scrolls sideways instead of squeezing further (phones). */
 const MIN_WIDTH = 900;
 
-/** How much the lens magnifies at the cursor, and its radius in days. */
-const LENS_ZOOM = 4;
-const LENS_DAYS = 14;
-
-/** Title labels stack in lanes above the line so they don't overlap. */
+const HEADER = 44;
 const LANES = 5;
-const LANE_HEIGHT = 26;
-/** First lane's top, clear of the month names. */
-const LABEL_TOP = 40;
-/** Space between the lowest label and the line. */
-const LINE_GAP = 28;
-const LINE_Y = LABEL_TOP + LANES * LANE_HEIGHT + LINE_GAP;
-const TRACK_HEIGHT = LINE_Y + 64;
+const LANE_HEIGHT = 30;
+const LANES_TOP = HEADER + 8;
+const AXIS_Y = LANES_TOP + LANES * LANE_HEIGHT + 26;
+const HEIGHT = AXIS_Y + 64;
 const DOT = 12;
-
-/** Positions ease to their new place as the lens moves. */
-const MOVE = 'transition-[left,top,width,height] duration-150 ease-out';
 
 const DOT_CLASSES: Record<EventStatus, string> = {
   'scheduled': 'bg-primary',
@@ -58,57 +64,34 @@ const STATUS_LABELS: Record<EventStatus, string> = {
   'done': 'Done',
 };
 
-const dayOf = (date: Date) => differenceInCalendarDays(date, RANGE_START);
-
-/**
- * Day offset (fractional; day d spans [d, d+1]) → x in px across `width`.
- * With a focus day, days near it get up to LENS_ZOOM× the room and the rest
- * shrink to make up for it. The focus keeps its unmagnified x, so whatever is
- * under the cursor stays under it.
- */
-function makeScale(width: number, focus: number | null): (day: number) => number {
-  const inner = width - PAD_X * 2;
-  if (focus === null) return (day) => PAD_X + (day / TOTAL_DAYS) * inner;
-
-  // cum[d] = room taken by days before d
-  const cum = [0];
-  for (let d = 0; d < TOTAL_DAYS; d++) {
-    cum.push(cum[d] + 1 + (LENS_ZOOM - 1) * Math.exp(-(((d + 0.5 - focus) / LENS_DAYS) ** 2)));
-  }
-  const at = (day: number) => {
-    const i = Math.min(Math.max(Math.floor(day), 0), TOTAL_DAYS - 1);
-    return cum[i] + (cum[i + 1] - cum[i]) * (day - i);
-  };
-  const f = at(focus);
-  const fx = (focus / TOTAL_DAYS) * inner;
-  const end = cum[TOTAL_DAYS];
-  return (day) => {
-    const c = at(day);
-    return PAD_X + (c <= f ? (f > 0 ? (c / f) * fx : 0) : fx + ((c - f) / (end - f)) * (inner - fx));
-  };
-}
-
 interface Placed {
   event: Event;
-  x: number;
+  /** Position across the month, as a percentage. */
+  pct: number;
   /** null when every lane is taken there; the dot is still shown. */
   lane: number | null;
+  /** Label width in px; it hangs left of the dot near the month's right edge. */
+  labelWidth: number;
+  flip: boolean;
 }
 
-/** Greedy lane assignment: each label takes the lowest lane that's free at its x. */
-function place(events: Event[], scale: (day: number) => number): Placed[] {
+/** Greedy lane assignment within one month at `width` px: each label takes the lowest lane that's free. */
+function place(events: Event[], month: Month, width: number): Placed[] {
   const laneEnds = new Array<number>(LANES).fill(-Infinity);
   const perDay = new Map<number, number>();
   return events.map((event) => {
-    const day = dayOf(eventStart(event)!);
+    const day = dayOf(eventStart(event)!) - month.startDay;
     // Several events on one day sit side by side
     const nth = perDay.get(day) ?? 0;
     perDay.set(day, nth + 1);
-    const x = scale(day + 0.5) + nth * (DOT + 2);
-    const width = Math.min(event.title.length * 6.5 + 20, 180);
-    const lane = laneEnds.findIndex((end) => end < x - DOT / 2);
-    if (lane !== -1) laneEnds[lane] = x - DOT / 2 + width + 6;
-    return { event, x, lane: lane === -1 ? null : lane };
+    const x = ((day + 0.5) / month.days) * width + nth * (DOT + 2);
+    const labelWidth = Math.max(Math.min(event.title.length * 6.4 + 34, 200, width - 8), 0);
+    const flip = x - DOT / 2 + labelWidth > width - 4;
+    const from = flip ? x + DOT / 2 - labelWidth : x - DOT / 2;
+    // Too narrow to read: dot only
+    const lane = labelWidth < 60 ? -1 : laneEnds.findIndex((end) => end < from - 6);
+    if (lane !== -1) laneEnds[lane] = Math.max(laneEnds[lane], from + labelWidth);
+    return { event, pct: (x / width) * 100, lane: lane === -1 ? null : lane, labelWidth, flip };
   });
 }
 
@@ -123,10 +106,9 @@ interface EventTimelineProps {
 export function EventTimeline({ events, isLoading, onSelect, epfStatus }: EventTimelineProps) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(MIN_WIDTH);
-  /** The day under the mouse, or null when it's off the line. */
-  const [focus, setFocus] = useState<number | null>(null);
+  const [zoomed, setZoomed] = useState<number | null>(null);
   const today = startOfDay(new Date());
-  const todayInRange = today >= RANGE_START && today <= RANGE_END;
+  const todayDay = dayOf(today);
 
   // Fit the year to the box
   useEffect(() => {
@@ -137,28 +119,20 @@ export function EventTimeline({ events, isLoading, onSelect, epfStatus }: EventT
     return () => observer.disconnect();
   }, [isLoading]);
 
-  const dated = useMemo(
-    () =>
-      events.filter((e) => {
-        const start = eventStart(e);
-        return start !== null && startOfDay(start) >= RANGE_START && startOfDay(start) <= RANGE_END;
-      }),
-    [events]
-  );
+  const byMonth = useMemo(() => {
+    const lists = MONTHS.map(() => [] as Event[]);
+    for (const e of events) {
+      const start = eventStart(e);
+      if (!start || startOfDay(start) < RANGE_START || startOfDay(start) > RANGE_END) continue;
+      lists[MONTHS.findIndex((m) => isSameMonth(m.date, start))].push(e);
+    }
+    return lists;
+  }, [events]);
 
-  const scale = useMemo(() => makeScale(width, focus), [width, focus]);
-  const placed = place(dated, scale);
+  if (isLoading) return <Skeleton className="h-72 w-full rounded-xl" />;
 
-  const months = eachMonthOfInterval({ start: RANGE_START, end: RANGE_END });
-  const weeks = eachWeekOfInterval({ start: RANGE_START, end: RANGE_END }, { weekStartsOn: 1 }).filter((w) => w >= RANGE_START);
-
-  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType !== 'mouse') return;
-    const x = e.clientX - e.currentTarget.getBoundingClientRect().left - PAD_X;
-    setFocus(Math.min(Math.max((x / (width - PAD_X * 2)) * TOTAL_DAYS, 0), TOTAL_DAYS));
-  };
-
-  if (isLoading) return <Skeleton className="h-64 w-full" />;
+  const grows = MONTHS.map((m, i) => weight(m) * (zoomed === i ? ZOOM : 1));
+  const totalGrow = grows.reduce((a, b) => a + b, 0);
 
   return (
     <div className="space-y-3">
@@ -169,116 +143,151 @@ export function EventTimeline({ events, isLoading, onSelect, epfStatus }: EventT
             {STATUS_LABELS[s]}
           </span>
         ))}
-        <span>Numbers on the line are Mondays</span>
-        <span className="ml-auto">Hover the line to zoom in</span>
+        <span className="ml-auto">Hover a month to zoom in · numbers are Mondays</span>
       </div>
 
-      <div ref={boxRef} className="scrollbar-thin overflow-x-auto border border-border bg-muted/10">
-        <div
-          className="relative"
-          style={{ width, height: TRACK_HEIGHT }}
-          onPointerMove={onPointerMove}
-          onPointerLeave={() => setFocus(null)}
-        >
-          {/* Month bands */}
-          {months.map((m, i) => {
-            const start = i === 0 ? RANGE_START : m;
-            const next = months[i + 1] ?? addDays(RANGE_END, 1);
-            const left = scale(dayOf(start));
+      <div ref={boxRef} className="scrollbar-thin overflow-x-auto rounded-xl border border-border bg-gradient-to-b from-muted/40 to-background shadow-sm">
+        <div className="relative flex" style={{ width, height: HEIGHT }} onMouseLeave={() => setZoomed(null)}>
+          {MONTHS.map((month, i) => {
+            const monthWidth = (width * grows[i]) / totalGrow;
+            const placed = place(byMonth[i], month, monthWidth);
+            const isCurrent = isSameMonth(month.date, today);
+            const zoom = zoomed === i;
+            // How much of this month's line is in the past, 0–100
+            const progress = Math.min(Math.max(((todayDay - month.startDay) / month.days) * 100, 0), 100);
+            const hidden = placed.filter((p) => p.lane === null).length;
             return (
-              <div
-                key={m.toISOString()}
-                className={cn('absolute inset-y-0 overflow-hidden border-l border-border/70', MOVE, i % 2 === 1 && 'bg-muted/30')}
-                style={{ left, width: scale(dayOf(next)) - left }}
+              <section
+                key={month.date.toISOString()}
+                aria-label={format(month.date, 'MMMM yyyy')}
+                onMouseEnter={() => setZoomed(i)}
+                onFocus={() => setZoomed(i)}
+                className={cn(
+                  'relative min-w-0 transition-[flex-grow,background-color] duration-300 ease-out',
+                  i > 0 && 'border-l border-border/50',
+                  zoom ? 'bg-primary/[0.06]' : isCurrent ? 'bg-primary/[0.03]' : i % 2 === 1 && 'bg-muted/20'
+                )}
+                style={{ flexGrow: grows[i], flexBasis: 0 }}
               >
-                <span className="absolute left-2 top-2 whitespace-nowrap font-serif text-sm font-semibold text-foreground">
-                  {format(m, 'MMMM')}
-                  {(i === 0 || m.getMonth() === 0) && <span className="ml-1 font-sans text-[11px] font-normal text-muted-foreground">{format(m, 'yyyy')}</span>}
-                </span>
-              </div>
-            );
-          })}
+                {/* Month name and count */}
+                <header className="flex items-baseline gap-1.5 overflow-hidden whitespace-nowrap px-3 pt-3">
+                  <span className={cn('font-serif text-sm font-semibold', isCurrent ? 'text-primary' : 'text-foreground')}>
+                    {format(month.date, zoom || monthWidth > 110 ? 'MMMM' : 'MMM')}
+                  </span>
+                  {(i === 0 || month.date.getMonth() === 0) && <span className="text-[11px] text-muted-foreground">{format(month.date, 'yyyy')}</span>}
+                  {byMonth[i].length > 0 && (
+                    <span className="ml-auto rounded-full bg-muted px-1.5 text-[10px] font-medium tabular-nums text-muted-foreground" title={`${byMonth[i].length} events`}>
+                      {byMonth[i].length}
+                    </span>
+                  )}
+                </header>
+                {hidden > 0 && !zoom && (
+                  <span className="absolute left-3 text-[10px] text-muted-foreground/80" style={{ top: AXIS_Y - 26 }}>
+                    +{hidden} more
+                  </span>
+                )}
 
-          {/* The line */}
-          <div className="absolute h-0.5 bg-foreground/70" style={{ left: PAD_X, right: PAD_X, top: LINE_Y - 1 }} />
+                {/* The line, filled up to today */}
+                <div className="absolute inset-x-0 h-1 bg-border" style={{ top: AXIS_Y - 2 }}>
+                  <div className="h-full bg-primary/50" style={{ width: `${progress}%` }} />
+                </div>
 
-          {/* Week ticks with Monday dates */}
-          {weeks.map((w) => (
-            <div key={w.toISOString()} className={cn('absolute flex flex-col items-center', MOVE)} style={{ left: scale(dayOf(w) + 0.5), top: LINE_Y + 2, transform: 'translateX(-50%)' }}>
-              <span className="h-2 w-px bg-foreground/50" />
-              <span className="mt-1.5 text-[10px] tabular-nums text-muted-foreground">{format(w, 'd')}</span>
-            </div>
-          ))}
-
-          {/* Today */}
-          {todayInRange && (
-            <div className={cn('pointer-events-none absolute w-px border-l border-dashed border-destructive', MOVE)} style={{ left: scale(dayOf(today) + 0.5), top: 28, bottom: 8 }}>
-              <span className="absolute -translate-x-1/2 bg-destructive px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-destructive-foreground" style={{ top: LINE_Y + 34 - 28 }}>
-                Today
-              </span>
-            </div>
-          )}
-
-          {/* Events */}
-          {placed.map(({ event, x, lane }) => {
-            const labelTop = lane === null ? LINE_Y - DOT / 2 : LABEL_TOP + (LANES - 1 - lane) * LANE_HEIGHT;
-            const status = event.status ?? 'scheduled';
-            return (
-              <HoverCard key={event.id} openDelay={80} closeDelay={60}>
-                <HoverCardTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => onSelect(event)}
-                    aria-label={`${event.title}, ${formatEventDate(event, 'MMM d')}`}
-                    className={cn('group absolute flex flex-col items-start hover:!z-20 focus:outline-none focus-visible:!z-20', MOVE)}
-                    // Labels nearer the line sit on top, so taller stems pass behind them
-                    style={{ left: x - DOT / 2, top: labelTop, height: LINE_Y + DOT / 2 - labelTop, zIndex: LANES - (lane ?? 0) }}
+                {/* Mondays */}
+                {month.mondays.map((w) => (
+                  <div
+                    key={w.toISOString()}
+                    className="absolute flex -translate-x-1/2 flex-col items-center"
+                    style={{ left: `${((dayOf(w) - month.startDay + 0.5) / month.days) * 100}%`, top: AXIS_Y + 6 }}
                   >
-                    {lane !== null && (
-                      <span className="max-w-[180px] truncate border border-border bg-background px-1.5 py-0.5 text-[11px] font-medium leading-tight text-foreground shadow-sm transition-colors group-hover:border-primary group-hover:text-primary group-focus-visible:border-primary">
-                        {event.title}
-                      </span>
-                    )}
-                    <span className="ml-[5.5px] w-px flex-1 bg-border group-hover:bg-primary" />
-                    <span
-                      className={cn(
-                        'h-3 w-3 shrink-0 rounded-full ring-2 ring-background transition-transform group-hover:scale-150 group-focus-visible:scale-150',
-                        DOT_CLASSES[status]
-                      )}
-                    />
-                  </button>
-                </HoverCardTrigger>
-                <HoverCardContent side="top" style={{ borderRadius: 0 }} className="w-96 border-border p-4">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" style={{ borderRadius: 0 }} className="text-[10px] uppercase tracking-wider">
-                      Event
-                    </Badge>
-                    <Badge variant="outline" className="text-[10px]">{STATUS_LABELS[status]}</Badge>
-                    {epfStatus(event.id) === 'uploaded' && (
-                      <Badge variant="outline" className="border-emerald-500/40 text-[10px] text-emerald-600 dark:text-emerald-400">
-                        <FileCheck2 className="mr-1 h-3 w-3" />
-                        EPF
-                      </Badge>
-                    )}
-                    {epfStatus(event.id) === 'missing' && <NoEpfBadge />}
+                    <span className="h-1.5 w-px bg-foreground/30" />
+                    <span className="mt-1 text-[10px] tabular-nums text-muted-foreground">{format(w, 'd')}</span>
                   </div>
-                  <h3 className="mt-2 font-serif text-lg font-semibold leading-snug text-foreground">{event.title}</h3>
-                  <div className="mt-3">
-                    <DetailFacts
-                      facts={[
-                        { icon: CalendarDays, label: 'Date', value: formatEventDateRange(event, 'EEE, MMM d, yyyy') },
-                        { icon: Clock, label: 'Time', value: formatEventTimeRange(event) },
-                        {
-                          icon: MapPin,
-                          label: 'Location',
-                          value: event.location ?? <span className="font-normal text-muted-foreground">Not set</span>,
-                        },
-                      ]}
-                    />
+                ))}
+
+                {/* Today */}
+                {progress > 0 && progress < 100 && (
+                  <div className="pointer-events-none absolute w-px bg-destructive/70" style={{ left: `${progress}%`, top: HEADER, height: AXIS_Y - HEADER + 28 }}>
+                    <span className="absolute left-1/2 top-full -translate-x-1/2 whitespace-nowrap rounded-full bg-destructive px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-destructive-foreground shadow-sm">
+                      Today
+                    </span>
                   </div>
-                  <p className="mt-3 text-[11px] text-muted-foreground">Click for the overview, to-dos and finance.</p>
-                </HoverCardContent>
-              </HoverCard>
+                )}
+
+                {/* Events */}
+                {placed.map(({ event, pct, lane, labelWidth, flip }) => {
+                  const top = lane === null ? AXIS_Y - DOT / 2 : LANES_TOP + (LANES - 1 - lane) * LANE_HEIGHT;
+                  const status = event.status ?? 'scheduled';
+                  const past = (eventEnd(event) ?? eventStart(event)!) < today;
+                  return (
+                    <HoverCard key={event.id} openDelay={120} closeDelay={60}>
+                      <HoverCardTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => onSelect(event)}
+                          aria-label={`${event.title}, ${formatEventDate(event, 'MMM d')}`}
+                          className={cn(
+                            'group absolute flex -translate-x-1/2 flex-col items-center transition-[left,top,opacity] duration-300 ease-out hover:!z-30 hover:opacity-100 focus:outline-none focus-visible:!z-30 focus-visible:opacity-100',
+                            past && 'opacity-55'
+                          )}
+                          // Labels nearer the line sit on top, so taller stems pass behind them
+                          style={{ left: `${pct}%`, top, width: DOT, height: AXIS_Y + DOT / 2 - top, zIndex: 10 + LANES - (lane ?? 0) }}
+                        >
+                          {lane !== null && (
+                            <span
+                              className={cn(
+                                'absolute top-0 flex h-6 items-center gap-1.5 rounded-full border border-border bg-background px-2.5 text-[11px] font-medium text-foreground shadow-sm transition-all duration-200',
+                                'group-hover:-translate-y-0.5 group-hover:border-primary/60 group-hover:shadow-md group-focus-visible:border-primary group-focus-visible:ring-2 group-focus-visible:ring-primary/30',
+                                flip ? 'right-0' : 'left-0'
+                              )}
+                              style={{ maxWidth: labelWidth }}
+                            >
+                              <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', DOT_CLASSES[status])} />
+                              <span className="truncate">{event.title}</span>
+                            </span>
+                          )}
+                          {lane !== null && <span className="mt-6 w-px flex-1 bg-gradient-to-b from-border to-foreground/30 group-hover:from-primary/40 group-hover:to-primary" />}
+                          <span
+                            className={cn(
+                              'mt-auto h-3 w-3 shrink-0 rounded-full shadow ring-[3px] ring-background transition-transform duration-200 group-hover:scale-[1.35] group-focus-visible:scale-[1.35]',
+                              DOT_CLASSES[status]
+                            )}
+                          />
+                        </button>
+                      </HoverCardTrigger>
+                      <HoverCardContent side="top" className="w-96 rounded-xl border-border p-4 shadow-lg">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="gap-1.5 text-[10px]">
+                            <span className={cn('h-1.5 w-1.5 rounded-full', DOT_CLASSES[status])} />
+                            {STATUS_LABELS[status]}
+                          </Badge>
+                          {epfStatus(event.id) === 'uploaded' && (
+                            <Badge variant="outline" className="border-emerald-500/40 text-[10px] text-emerald-600 dark:text-emerald-400">
+                              <FileCheck2 className="mr-1 h-3 w-3" />
+                              EPF
+                            </Badge>
+                          )}
+                          {epfStatus(event.id) === 'missing' && <NoEpfBadge />}
+                        </div>
+                        <h3 className="mt-2 font-serif text-lg font-semibold leading-snug text-foreground">{event.title}</h3>
+                        <div className="mt-3">
+                          <DetailFacts
+                            facts={[
+                              { icon: CalendarDays, label: 'Date', value: formatEventDateRange(event, 'EEE, MMM d, yyyy') },
+                              { icon: Clock, label: 'Time', value: formatEventTimeRange(event) },
+                              {
+                                icon: MapPin,
+                                label: 'Location',
+                                value: event.location ?? <span className="font-normal text-muted-foreground">Not set</span>,
+                              },
+                            ]}
+                          />
+                        </div>
+                        <p className="mt-3 text-[11px] text-muted-foreground">Click for the overview, to-dos and finance.</p>
+                      </HoverCardContent>
+                    </HoverCard>
+                  );
+                })}
+              </section>
             );
           })}
         </div>
