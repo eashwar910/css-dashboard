@@ -9,6 +9,7 @@ import { MeetingsView } from '@/components/views/MeetingsView';
 import { TeamView } from '@/components/views/TeamView';
 import { FinanceView } from '@/components/views/FinanceView';
 import { ExternalRelationsView } from '@/components/views/ExternalRelationsView';
+import { LogisticsView } from '@/components/views/LogisticsView';
 import { Sun, Moon } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TaskRequestNotifications } from '@/components/TaskRequestNotifications';
@@ -58,6 +59,7 @@ function Dashboard() {
           {view === 'team' && <TeamView />}
           {view === 'finance' && <FinanceView />}
           {view === 'external' && <ExternalRelationsView />}
+          {view === 'logistics' && <LogisticsView />}
         </div>
       </main>
       <TaskRequestNotifications />
