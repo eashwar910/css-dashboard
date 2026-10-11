@@ -1,4 +1,4 @@
-import { format, parseISO, isValid, startOfDay, endOfDay } from 'date-fns';
+import { format, parseISO, isValid, startOfDay, endOfDay, isSameDay } from 'date-fns';
 import type { Event } from '@/lib/types';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -48,6 +48,14 @@ export function compareEvents(a: Event, b: Event): number {
 export function formatEventDate(event: Pick<Event, 'startDateTime'>, pattern: string): string {
   const start = eventStart(event);
   return start ? format(start, pattern) : 'Date TBA';
+}
+
+/** The start date, plus " – <end date>" when the event ends on a different day. */
+export function formatEventDateRange(event: Pick<Event, 'startDateTime' | 'endDateTime'>, pattern: string): string {
+  const start = eventStart(event);
+  const end = parseDate(event.endDateTime);
+  if (!start || !end || isSameDay(start, end)) return formatEventDate(event, pattern);
+  return `${format(start, pattern)} – ${format(end, pattern)}`;
 }
 
 /** "6:00 PM – 7:30 PM", "6:00 PM", "All day", or "Time TBA". */

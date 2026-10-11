@@ -8,7 +8,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/h
 import { DetailFacts } from '@/components/DetailFacts';
 import { NoEpfBadge } from '@/components/NoEpfBadge';
 import type { Event, EventStatus } from '@/lib/types';
-import { eventStart, formatEventDate, formatEventTimeRange } from '@/lib/eventDates';
+import { eventStart, formatEventDate, formatEventDateRange, formatEventTimeRange } from '@/lib/eventDates';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EventTimeline
@@ -287,7 +287,7 @@ export function EventTimeline({ events, isLoading, onSelect, epfStatus }: EventT
                   <div className="mt-3">
                     <DetailFacts
                       facts={[
-                        { icon: CalendarDays, label: 'Date', value: formatEventDate(event, 'EEE, MMM d, yyyy') },
+                        { icon: CalendarDays, label: 'Date', value: formatEventDateRange(event, 'EEE, MMM d, yyyy') },
                         { icon: Clock, label: 'Time', value: formatEventTimeRange(event) },
                         {
                           icon: MapPin,

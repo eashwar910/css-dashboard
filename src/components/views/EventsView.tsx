@@ -60,7 +60,7 @@ import { NoEpfBadge } from '@/components/NoEpfBadge';
 import { EventWhenFields } from '@/components/EventWhenFields';
 import { buildTimeline, whenFromEvent, type WhenValue } from '@/lib/eventWhen';
 import { useEpfs } from '@/hooks/useEpfs';
-import { eventEnd, eventStart, formatEventDate, formatEventTimeRange, isTba } from '@/lib/eventDates';
+import { eventEnd, eventStart, formatEventDate, formatEventDateRange, formatEventTimeRange, isTba } from '@/lib/eventDates';
 
 /** Calendar chip colours, keyed by event progression status. */
 const STATUS_CHIP_CLASSES: Record<EventStatus, string> = {
@@ -285,7 +285,7 @@ export function EventsView() {
                           ) : (
                             <>
                               <span className="text-xs font-semibold text-primary">
-                                {formatEventDate(event, 'EEEE, MMMM d, yyyy')}
+                                {formatEventDateRange(event, 'EEEE, MMMM d, yyyy')}
                               </span>
                               <span className="text-muted-foreground/60 hidden sm:inline">·</span>
                               <span className="text-xs text-muted-foreground">
@@ -418,7 +418,7 @@ export function EventsView() {
                     {
                       icon: CalendarDays,
                       label: 'Date',
-                      value: formatEventDate(activeSelectedEvent, 'EEE, MMM d, yyyy'),
+                      value: formatEventDateRange(activeSelectedEvent, 'EEE, MMM d, yyyy'),
                     },
                     ...(isTba(activeSelectedEvent)
                       ? []
