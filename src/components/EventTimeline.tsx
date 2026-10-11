@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { addDays, differenceInCalendarDays, eachMonthOfInterval, eachWeekOfInterval, format, startOfDay } from 'date-fns';
-import { CalendarDays, ChevronLeft, ChevronRight, Clock, FileCheck2, MapPin } from 'lucide-react';
+import { CalendarDays, Clock, FileCheck2, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -13,25 +13,38 @@ import { eventStart, formatEventDate, formatEventDateRange, formatEventTimeRange
 // ─────────────────────────────────────────────────────────────────────────────
 // EventTimeline
 //
-// The academic year (Sep 15 2026 – May 31 2027) as one horizontal line, with a
-// dot per dated event. Hovering or focusing a dot shows the event's details;
-// clicking opens the full event dialog. TBA events have no place on the line.
+// The academic year (Sep 15 2026 – May 31 2027) as one horizontal line that
+// fits the page, with a dot per dated event. Hovering the line magnifies the
+// weeks around the cursor (a fisheye), so crowded stretches spread out and
+// their labels fit. Hovering a dot shows the event's details; clicking opens
+// the full event dialog. TBA events have no place on the line.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const RANGE_START = new Date(2026, 8, 15);
 const RANGE_END = new Date(2027, 4, 31);
 const TOTAL_DAYS = differenceInCalendarDays(RANGE_END, RANGE_START) + 1;
 
-const PX_PER_DAY = 8;
 const PAD_X = 24;
-const TRACK_WIDTH = TOTAL_DAYS * PX_PER_DAY + PAD_X * 2;
+/** Below this the line scrolls sideways instead of squeezing further (phones). */
+const MIN_WIDTH = 900;
+
+/** How much the lens magnifies at the cursor, and its radius in days. */
+const LENS_ZOOM = 4;
+const LENS_DAYS = 14;
 
 /** Title labels stack in lanes above the line so they don't overlap. */
 const LANES = 5;
-const LANE_HEIGHT = 24;
-const LINE_Y = 24 + LANES * LANE_HEIGHT + 16;
-const TRACK_HEIGHT = LINE_Y + 56;
+const LANE_HEIGHT = 26;
+/** First lane's top, clear of the month names. */
+const LABEL_TOP = 40;
+/** Space between the lowest label and the line. */
+const LINE_GAP = 28;
+const LINE_Y = LABEL_TOP + LANES * LANE_HEIGHT + LINE_GAP;
+const TRACK_HEIGHT = LINE_Y + 64;
 const DOT = 12;
+
+/** Positions ease to their new place as the lens moves. */
+const MOVE = 'transition-[left,top,width,height] duration-150 ease-out';
 
 const DOT_CLASSES: Record<EventStatus, string> = {
   'scheduled': 'bg-primary',
@@ -45,8 +58,34 @@ const STATUS_LABELS: Record<EventStatus, string> = {
   'done': 'Done',
 };
 
-function xFor(date: Date) {
-  return PAD_X + differenceInCalendarDays(date, RANGE_START) * PX_PER_DAY + PX_PER_DAY / 2;
+const dayOf = (date: Date) => differenceInCalendarDays(date, RANGE_START);
+
+/**
+ * Day offset (fractional; day d spans [d, d+1]) → x in px across `width`.
+ * With a focus day, days near it get up to LENS_ZOOM× the room and the rest
+ * shrink to make up for it. The focus keeps its unmagnified x, so whatever is
+ * under the cursor stays under it.
+ */
+function makeScale(width: number, focus: number | null): (day: number) => number {
+  const inner = width - PAD_X * 2;
+  if (focus === null) return (day) => PAD_X + (day / TOTAL_DAYS) * inner;
+
+  // cum[d] = room taken by days before d
+  const cum = [0];
+  for (let d = 0; d < TOTAL_DAYS; d++) {
+    cum.push(cum[d] + 1 + (LENS_ZOOM - 1) * Math.exp(-(((d + 0.5 - focus) / LENS_DAYS) ** 2)));
+  }
+  const at = (day: number) => {
+    const i = Math.min(Math.max(Math.floor(day), 0), TOTAL_DAYS - 1);
+    return cum[i] + (cum[i + 1] - cum[i]) * (day - i);
+  };
+  const f = at(focus);
+  const fx = (focus / TOTAL_DAYS) * inner;
+  const end = cum[TOTAL_DAYS];
+  return (day) => {
+    const c = at(day);
+    return PAD_X + (c <= f ? (f > 0 ? (c / f) * fx : 0) : fx + ((c - f) / (end - f)) * (inner - fx));
+  };
 }
 
 interface Placed {
@@ -57,15 +96,15 @@ interface Placed {
 }
 
 /** Greedy lane assignment: each label takes the lowest lane that's free at its x. */
-function place(events: Event[]): Placed[] {
+function place(events: Event[], scale: (day: number) => number): Placed[] {
   const laneEnds = new Array<number>(LANES).fill(-Infinity);
   const perDay = new Map<number, number>();
   return events.map((event) => {
-    const day = differenceInCalendarDays(eventStart(event)!, RANGE_START);
+    const day = dayOf(eventStart(event)!);
     // Several events on one day sit side by side
     const nth = perDay.get(day) ?? 0;
     perDay.set(day, nth + 1);
-    const x = PAD_X + day * PX_PER_DAY + PX_PER_DAY / 2 + nth * (DOT + 2);
+    const x = scale(day + 0.5) + nth * (DOT + 2);
     const width = Math.min(event.title.length * 6.5 + 20, 180);
     const lane = laneEnds.findIndex((end) => end < x - DOT / 2);
     if (lane !== -1) laneEnds[lane] = x - DOT / 2 + width + 6;
@@ -82,90 +121,44 @@ interface EventTimelineProps {
 }
 
 export function EventTimeline({ events, isLoading, onSelect, epfStatus }: EventTimelineProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(MIN_WIDTH);
+  /** The day under the mouse, or null when it's off the line. */
+  const [focus, setFocus] = useState<number | null>(null);
   const today = startOfDay(new Date());
   const todayInRange = today >= RANGE_START && today <= RANGE_END;
 
-  const placed = useMemo(
+  // Fit the year to the box
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setWidth(Math.max(el.clientWidth, MIN_WIDTH)));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isLoading]);
+
+  const dated = useMemo(
     () =>
-      place(
-        events.filter((e) => {
-          const start = eventStart(e);
-          return start !== null && startOfDay(start) >= RANGE_START && startOfDay(start) <= RANGE_END;
-        })
-      ),
+      events.filter((e) => {
+        const start = eventStart(e);
+        return start !== null && startOfDay(start) >= RANGE_START && startOfDay(start) <= RANGE_END;
+      }),
     [events]
   );
+
+  const scale = useMemo(() => makeScale(width, focus), [width, focus]);
+  const placed = place(dated, scale);
 
   const months = eachMonthOfInterval({ start: RANGE_START, end: RANGE_END });
   const weeks = eachWeekOfInterval({ start: RANGE_START, end: RANGE_END }, { weekStartsOn: 1 }).filter((w) => w >= RANGE_START);
 
-  const scrollToToday = (behavior: ScrollBehavior = 'smooth') => {
-    const el = scrollRef.current;
-    if (el && todayInRange) el.scrollTo({ left: Math.max(0, xFor(today) - el.clientWidth / 3), behavior });
-  };
-  const scrollByPage = (direction: 1 | -1) => {
-    const el = scrollRef.current;
-    if (el) el.scrollBy({ left: direction * el.clientWidth * 0.8, behavior: 'smooth' });
-  };
-
-  // Open scrolled to today (a third of the way in), else at the start
-  useEffect(() => {
-    scrollToToday('auto');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading]);
-
-  // A vertical mouse wheel scrolls the line sideways; at either end the page scrolls as usual
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
-      const atStart = el.scrollLeft <= 0;
-      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1;
-      if ((e.deltaY < 0 && atStart) || (e.deltaY > 0 && atEnd)) return;
-      e.preventDefault();
-      el.scrollLeft += e.deltaY;
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [isLoading]);
-
-  // Click and drag to pan. A drag of more than a few pixels doesn't count as a click on a dot.
-  const drag = useRef<{ x: number; left: number; moved: boolean } | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType !== 'mouse' || e.button !== 0) return;
-    drag.current = { x: e.clientX, left: e.currentTarget.scrollLeft, moved: false };
-  };
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const d = drag.current;
-    if (!d) return;
-    const dx = e.clientX - d.x;
-    if (!d.moved && Math.abs(dx) < 4) return;
-    if (!d.moved) {
-      e.currentTarget.setPointerCapture(e.pointerId);
-      setDragging(true);
-    }
-    d.moved = true;
-    e.currentTarget.scrollLeft = d.left - dx;
-  };
-  const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-    setDragging(false);
-    // Leave `moved` set until the click that follows this pointerup has been swallowed
-    setTimeout(() => (drag.current = null));
-  };
-  const swallowClickAfterDrag = (e: React.MouseEvent) => {
-    if (drag.current?.moved) {
-      e.stopPropagation();
-      e.preventDefault();
-    }
+    if (e.pointerType !== 'mouse') return;
+    const x = e.clientX - e.currentTarget.getBoundingClientRect().left - PAD_X;
+    setFocus(Math.min(Math.max((x / (width - PAD_X * 2)) * TOTAL_DAYS, 0), TOTAL_DAYS));
   };
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;
-
-  const navButton = 'flex h-7 items-center border border-border px-2 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary';
 
   return (
     <div className="space-y-3">
@@ -177,42 +170,28 @@ export function EventTimeline({ events, isLoading, onSelect, epfStatus }: EventT
           </span>
         ))}
         <span>Numbers on the line are Mondays</span>
-        <div className="ml-auto flex items-center gap-1">
-          <button type="button" onClick={() => scrollByPage(-1)} aria-label="Scroll back" className={navButton}>
-            <ChevronLeft className="h-3.5 w-3.5" />
-          </button>
-          {todayInRange && (
-            <button type="button" onClick={() => scrollToToday()} className={navButton}>
-              Today
-            </button>
-          )}
-          <button type="button" onClick={() => scrollByPage(1)} aria-label="Scroll forward" className={navButton}>
-            <ChevronRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <span className="ml-auto">Hover the line to zoom in</span>
       </div>
 
-      <div
-        ref={scrollRef}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onClickCapture={swallowClickAfterDrag}
-        className="scrollbar-thin cursor-grab select-none overflow-x-auto border border-border bg-muted/10 active:cursor-grabbing"
-      >
-        <div className="relative" style={{ width: TRACK_WIDTH, height: TRACK_HEIGHT }}>
+      <div ref={boxRef} className="scrollbar-thin overflow-x-auto border border-border bg-muted/10">
+        <div
+          className="relative"
+          style={{ width, height: TRACK_HEIGHT }}
+          onPointerMove={onPointerMove}
+          onPointerLeave={() => setFocus(null)}
+        >
           {/* Month bands */}
           {months.map((m, i) => {
             const start = i === 0 ? RANGE_START : m;
             const next = months[i + 1] ?? addDays(RANGE_END, 1);
+            const left = scale(dayOf(start));
             return (
               <div
                 key={m.toISOString()}
-                className={cn('absolute inset-y-0 border-l border-border/70', i % 2 === 1 && 'bg-muted/30')}
-                style={{ left: xFor(start) - PX_PER_DAY / 2, width: differenceInCalendarDays(next, start) * PX_PER_DAY }}
+                className={cn('absolute inset-y-0 overflow-hidden border-l border-border/70', MOVE, i % 2 === 1 && 'bg-muted/30')}
+                style={{ left, width: scale(dayOf(next)) - left }}
               >
-                <span className="absolute left-2 top-2 font-serif text-sm font-semibold text-foreground">
+                <span className="absolute left-2 top-2 whitespace-nowrap font-serif text-sm font-semibold text-foreground">
                   {format(m, 'MMMM')}
                   {(i === 0 || m.getMonth() === 0) && <span className="ml-1 font-sans text-[11px] font-normal text-muted-foreground">{format(m, 'yyyy')}</span>}
                 </span>
@@ -225,16 +204,16 @@ export function EventTimeline({ events, isLoading, onSelect, epfStatus }: EventT
 
           {/* Week ticks with Monday dates */}
           {weeks.map((w) => (
-            <div key={w.toISOString()} className="absolute flex flex-col items-center" style={{ left: xFor(w), top: LINE_Y + 2, transform: 'translateX(-50%)' }}>
+            <div key={w.toISOString()} className={cn('absolute flex flex-col items-center', MOVE)} style={{ left: scale(dayOf(w) + 0.5), top: LINE_Y + 2, transform: 'translateX(-50%)' }}>
               <span className="h-2 w-px bg-foreground/50" />
-              <span className="mt-1 text-[10px] tabular-nums text-muted-foreground">{format(w, 'd')}</span>
+              <span className="mt-1.5 text-[10px] tabular-nums text-muted-foreground">{format(w, 'd')}</span>
             </div>
           ))}
 
           {/* Today */}
           {todayInRange && (
-            <div className="pointer-events-none absolute w-px border-l border-dashed border-destructive" style={{ left: xFor(today), top: 28, bottom: 8 }}>
-              <span className="absolute -translate-x-1/2 bg-destructive px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-destructive-foreground" style={{ top: LINE_Y + 30 - 28 }}>
+            <div className={cn('pointer-events-none absolute w-px border-l border-dashed border-destructive', MOVE)} style={{ left: scale(dayOf(today) + 0.5), top: 28, bottom: 8 }}>
+              <span className="absolute -translate-x-1/2 bg-destructive px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-destructive-foreground" style={{ top: LINE_Y + 34 - 28 }}>
                 Today
               </span>
             </div>
@@ -242,7 +221,7 @@ export function EventTimeline({ events, isLoading, onSelect, epfStatus }: EventT
 
           {/* Events */}
           {placed.map(({ event, x, lane }) => {
-            const labelTop = lane === null ? LINE_Y - DOT / 2 : 32 + (LANES - 1 - lane) * LANE_HEIGHT;
+            const labelTop = lane === null ? LINE_Y - DOT / 2 : LABEL_TOP + (LANES - 1 - lane) * LANE_HEIGHT;
             const status = event.status ?? 'scheduled';
             return (
               <HoverCard key={event.id} openDelay={80} closeDelay={60}>
@@ -251,7 +230,7 @@ export function EventTimeline({ events, isLoading, onSelect, epfStatus }: EventT
                     type="button"
                     onClick={() => onSelect(event)}
                     aria-label={`${event.title}, ${formatEventDate(event, 'MMM d')}`}
-                    className="group absolute flex flex-col items-start hover:!z-20 focus:outline-none focus-visible:!z-20"
+                    className={cn('group absolute flex flex-col items-start hover:!z-20 focus:outline-none focus-visible:!z-20', MOVE)}
                     // Labels nearer the line sit on top, so taller stems pass behind them
                     style={{ left: x - DOT / 2, top: labelTop, height: LINE_Y + DOT / 2 - labelTop, zIndex: LANES - (lane ?? 0) }}
                   >
@@ -269,7 +248,7 @@ export function EventTimeline({ events, isLoading, onSelect, epfStatus }: EventT
                     />
                   </button>
                 </HoverCardTrigger>
-                <HoverCardContent side="top" style={{ borderRadius: 0 }} className={cn('w-96 border-border p-4', dragging && 'hidden')}>
+                <HoverCardContent side="top" style={{ borderRadius: 0 }} className="w-96 border-border p-4">
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" style={{ borderRadius: 0 }} className="text-[10px] uppercase tracking-wider">
                       Event
@@ -304,7 +283,6 @@ export function EventTimeline({ events, isLoading, onSelect, epfStatus }: EventT
           })}
         </div>
       </div>
-
     </div>
   );
 }
