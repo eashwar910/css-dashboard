@@ -179,6 +179,103 @@ export function EventsView() {
     }
   };
 
+  const activeEvents = allEvents.filter((e) => e.status !== 'done');
+  const doneEvents = allEvents.filter((e) => e.status === 'done');
+
+  const renderEvent = (event: Event) => {
+    const tba = isTba(event);
+    return (
+      <article
+        key={event.id}
+        onClick={() => setSelectedEvent(event)}
+        className="group cursor-pointer py-5 transition-colors hover:bg-muted/10 sm:px-4"
+      >
+        {/* Responsive container: stacked card below 640px (< sm), horizontal on >= sm */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              {tba ? (
+                <TbaTag />
+              ) : (
+                <>
+                  <span className="text-xs font-semibold text-primary">
+                    {formatEventDateRange(event, 'EEEE, MMMM d, yyyy')}
+                  </span>
+                  <span className="text-muted-foreground/60 hidden sm:inline">·</span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatEventTimeRange(event)}
+                  </span>
+                </>
+              )}
+            </div>
+            <h3 className="font-serif text-base sm:text-lg font-semibold text-foreground group-hover:text-primary transition-colors">
+              {event.title}
+            </h3>
+            {event.location && (
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <MapPin className="h-3 w-3 shrink-0" />
+                {event.location}
+              </p>
+            )}
+            {EVENT_FEATURES.description && event.description && (
+              <p className="pt-0.5 text-xs text-muted-foreground line-clamp-2">
+                {event.description}
+              </p>
+            )}
+          </div>
+
+          {/* Right metadata / actions on desktop, bottom bar on mobile */}
+          <div className="flex shrink-0 items-center justify-between sm:justify-end gap-3 sm:flex-col sm:items-end sm:gap-2 pt-1 sm:pt-0 border-t border-border/40 sm:border-0">
+            <div className="flex items-center gap-1.5">
+              {epfsByEvent[event.id] ? (
+                <Badge
+                  variant="outline"
+                  title="EPF uploaded"
+                  className="border-emerald-500/40 text-[10px] text-emerald-600 dark:text-emerald-400"
+                >
+                  <FileCheck2 className="mr-1 h-3 w-3" />
+                  EPF
+                </Badge>
+              ) : (
+                epfsKnown && <NoEpfBadge />
+              )}
+              {event.status && (
+                <Badge variant="outline" className="text-[10px]">
+                  {STATUS_LABELS[event.status]}
+                </Badge>
+              )}
+              {canDelete && (
+                <button
+                  type="button"
+                  title="Delete event"
+                  aria-label={`Delete event ${event.title}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEventToDelete(event);
+                  }}
+                  className="p-1 text-muted-foreground transition-colors hover:text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            {EVENT_FEATURES.rsvp && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Users className="h-3 w-3 sm:hidden" />
+                {event.rsvpCount} Going
+              </span>
+            )}
+            {EVENT_FEATURES.agenda && event.agenda && event.agenda.length > 0 && (
+              <span className="text-[11px] text-primary/80">
+                {event.agenda.length} {event.agenda.length === 1 ? 'segment' : 'segments'}
+              </span>
+            )}
+          </div>
+        </div>
+      </article>
+    );
+  };
+
   return (
     <div className="space-y-10">
 
@@ -244,11 +341,11 @@ export function EventsView() {
         /* ── List view (Degrades to stacked cards below 640px) ── */
         <section className="space-y-6">
           <div className="flex items-baseline justify-between border-b border-border pb-2">
-            <h2 className="font-serif text-xl font-semibold">All Events</h2>
+            <h2 className="font-serif text-xl font-semibold">Events</h2>
             <span className="text-xs text-muted-foreground">
               {isLoading
                 ? 'Loading...'
-                : `${allEvents.length} total${tbaEvents.length ? ` · ${tbaEvents.length} TBA` : ''}`}
+                : `${activeEvents.length} total${tbaEvents.length ? ` · ${tbaEvents.length} TBA` : ''}`}
             </span>
           </div>
 
@@ -262,107 +359,28 @@ export function EventsView() {
                 </div>
               ))}
             </div>
-          ) : allEvents.length === 0 ? (
+          ) : activeEvents.length === 0 ? (
             <p className="py-8 text-xs text-muted-foreground">
-              No events scheduled yet.
+              {doneEvents.length ? 'Every event is done.' : 'No events scheduled yet.'}
             </p>
           ) : (
             <div className="divide-y divide-border border-b border-border">
-              {allEvents.map((event) => {
-                const tba = isTba(event);
-                return (
-                  <article
-                    key={event.id}
-                    onClick={() => setSelectedEvent(event)}
-                    className="group cursor-pointer py-5 transition-colors hover:bg-muted/10 sm:px-4"
-                  >
-                    {/* Responsive container: stacked card below 640px (< sm), horizontal on >= sm */}
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="space-y-1.5 flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {tba ? (
-                            <TbaTag />
-                          ) : (
-                            <>
-                              <span className="text-xs font-semibold text-primary">
-                                {formatEventDateRange(event, 'EEEE, MMMM d, yyyy')}
-                              </span>
-                              <span className="text-muted-foreground/60 hidden sm:inline">·</span>
-                              <span className="text-xs text-muted-foreground">
-                                {formatEventTimeRange(event)}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                        <h3 className="font-serif text-base sm:text-lg font-semibold text-foreground group-hover:text-primary transition-colors">
-                          {event.title}
-                        </h3>
-                        {event.location && (
-                          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <MapPin className="h-3 w-3 shrink-0" />
-                            {event.location}
-                          </p>
-                        )}
-                        {EVENT_FEATURES.description && event.description && (
-                          <p className="pt-0.5 text-xs text-muted-foreground line-clamp-2">
-                            {event.description}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Right metadata / actions on desktop, bottom bar on mobile */}
-                      <div className="flex shrink-0 items-center justify-between sm:justify-end gap-3 sm:flex-col sm:items-end sm:gap-2 pt-1 sm:pt-0 border-t border-border/40 sm:border-0">
-                        <div className="flex items-center gap-1.5">
-                          {epfsByEvent[event.id] ? (
-                            <Badge
-                              variant="outline"
-                              title="EPF uploaded"
-                              className="border-emerald-500/40 text-[10px] text-emerald-600 dark:text-emerald-400"
-                            >
-                              <FileCheck2 className="mr-1 h-3 w-3" />
-                              EPF
-                            </Badge>
-                          ) : (
-                            epfsKnown && <NoEpfBadge />
-                          )}
-                          {event.status && (
-                            <Badge variant="outline" className="text-[10px]">
-                              {STATUS_LABELS[event.status]}
-                            </Badge>
-                          )}
-                          {canDelete && (
-                            <button
-                              type="button"
-                              title="Delete event"
-                              aria-label={`Delete event ${event.title}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEventToDelete(event);
-                              }}
-                              className="p-1 text-muted-foreground transition-colors hover:text-destructive hover:bg-destructive/10"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                        </div>
-                        {EVENT_FEATURES.rsvp && (
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Users className="h-3 w-3 sm:hidden" />
-                            {event.rsvpCount} Going
-                          </span>
-                        )}
-                        {EVENT_FEATURES.agenda && event.agenda && event.agenda.length > 0 && (
-                          <span className="text-[11px] text-primary/80">
-                            {event.agenda.length} {event.agenda.length === 1 ? 'segment' : 'segments'}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
+              {activeEvents.map(renderEvent)}
             </div>
           )}
+        </section>
+      )}
+
+      {/* ── Done events, under the list ── */}
+      {mode === 'list' && !isLoading && doneEvents.length > 0 && (
+        <section className="space-y-6">
+          <div className="flex items-baseline justify-between border-b border-border pb-2">
+            <h2 className="font-serif text-xl font-semibold">Done</h2>
+            <span className="text-xs text-muted-foreground">{doneEvents.length} total</span>
+          </div>
+          <div className="divide-y divide-border border-b border-border opacity-80">
+            {doneEvents.map(renderEvent)}
+          </div>
         </section>
       )}
 
