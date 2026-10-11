@@ -20,9 +20,11 @@ import {
   Rows3,
   Columns3,
   Trash2,
+  Baseline,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { editorExtensions } from '@/lib/editorExtensions';
+import { editorExtensions, NOTION_COLOURS } from '@/lib/editorExtensions';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface RichTextEditorProps {
   /** Markdown to start from (the server's editorMarkdown). */
@@ -68,6 +70,55 @@ function ToolbarButton({
   );
 }
 
+/** Text colour, saved as Notion's own colour tag (see NotionColor). */
+function ColourPicker({ editor, current, disabled }: { editor: Editor; current: string | null; disabled: boolean }) {
+  const setColour = (name: string | null) => {
+    const chain = editor.chain().focus();
+    (name ? chain.setMark('notionColor', { attrs: ` color="${name}"` }) : chain.unsetMark('notionColor')).run();
+  };
+  return (
+    <Popover>
+      <PopoverTrigger asChild disabled={disabled}>
+        <button
+          type="button"
+          title="Text colour"
+          aria-label="Text colour"
+          onMouseDown={(e) => e.preventDefault()}
+          className="flex h-7 w-7 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+        >
+          <Baseline className="h-3.5 w-3.5" style={current ? { color: NOTION_COLOURS[current] } : undefined} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-auto rounded-none p-1.5" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <div className="grid grid-cols-5 gap-1">
+          <button
+            type="button"
+            title="Default"
+            aria-label="Default colour"
+            onClick={() => setColour(null)}
+            className={cn('flex h-7 w-7 items-center justify-center border text-sm font-semibold text-foreground hover:bg-muted', !current && 'border-primary')}
+          >
+            A
+          </button>
+          {Object.entries(NOTION_COLOURS).map(([name, css]) => (
+            <button
+              key={name}
+              type="button"
+              title={name[0].toUpperCase() + name.slice(1)}
+              aria-label={`${name} text`}
+              onClick={() => setColour(name)}
+              style={{ color: css }}
+              className={cn('flex h-7 w-7 items-center justify-center border text-sm font-semibold hover:bg-muted', current === name && 'border-primary')}
+            >
+              A
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function Divider() {
   return <span className="mx-1 h-5 w-px bg-border" aria-hidden />;
 }
@@ -90,6 +141,7 @@ function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
       quote: e.isActive('blockquote'),
       link: e.isActive('link'),
       table: e.isActive('table'),
+      colour: (String(e.getAttributes('notionColor').attrs ?? '').match(/color="([a-z]+)"/)?.[1] ?? null) as string | null,
       canUndo: e.can().undo(),
       canRedo: e.can().redo(),
     }),
@@ -124,6 +176,7 @@ function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
       <ToolbarButton title="Inline code" active={state.code} disabled={disabled} onClick={() => chain().toggleCode().run()}>
         <Code className="h-3.5 w-3.5" />
       </ToolbarButton>
+      <ColourPicker editor={editor} current={state.colour} disabled={disabled} />
       <ToolbarButton title="Link" active={state.link} disabled={disabled} onClick={setLink}>
         <Link2 className="h-3.5 w-3.5" />
       </ToolbarButton>

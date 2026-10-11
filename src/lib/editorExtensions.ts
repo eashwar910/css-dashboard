@@ -92,7 +92,7 @@ const NotionParagraph = Paragraph.extend({
 });
 
 /** Notion colour names → CSS, for showing coloured text in the editor. */
-const NOTION_COLOURS: Record<string, string> = {
+export const NOTION_COLOURS: Record<string, string> = {
   gray: '#787774', brown: '#9f6b53', orange: '#d9730d', yellow: '#cb912f', green: '#448361',
   blue: '#337ea9', purple: '#9065b0', pink: '#c14c8a', red: '#d44c47',
 };
