@@ -47,7 +47,7 @@ import type { View } from '@/components/Navbar';
 import { EVENT_FEATURES } from '@/lib/features';
 import { TbaTag } from '@/components/TbaTag';
 import { AddDocumentDialog } from '@/components/AddDocumentDialog';
-import { eventStart, formatEventDate, formatEventTimeRange, isTba } from '@/lib/eventDates';
+import { eventStart, formatEventDate, formatEventTimeRange, isProject, isTba } from '@/lib/eventDates';
 
 import { useEvents } from '@/hooks/useEvents';
 import { useMeetings } from '@/hooks/useMeetings';
@@ -94,7 +94,11 @@ export interface HomeViewProps {
 }
 
 export function HomeView({ onNavigate, searchQuery = '', onSearchChange }: HomeViewProps = {}) {
-  const { upcoming: upcomingEvents, tba: tbaEvents, data: allEvents, isLoading: eventsLoading, error: eventsError, deleteEvent, canDelete } = useEvents();
+  const { upcoming: rawUpcoming, tba: rawTba, data: rawEvents, isLoading: eventsLoading, error: eventsError, deleteEvent, canDelete } = useEvents();
+  // Gilbot is a project with its own tab, not an event
+  const upcomingEvents = useMemo(() => rawUpcoming.filter((e) => !isProject(e)), [rawUpcoming]);
+  const tbaEvents = useMemo(() => rawTba.filter((e) => !isProject(e)), [rawTba]);
+  const allEvents = useMemo(() => rawEvents.filter((e) => !isProject(e)), [rawEvents]);
   const { upcoming: upcomingMeetings, isLoading: meetingsLoading, error: meetingsError } = useMeetings();
   const { data: documents, byCategory: docsByCategory, isLoading: docsLoading, error: docsError, addDocument } = useDocuments();
   const [addDocOpen, setAddDocOpen] = useState(false);

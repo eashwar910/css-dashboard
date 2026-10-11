@@ -60,7 +60,7 @@ import { NoEpfBadge } from '@/components/NoEpfBadge';
 import { EventWhenFields } from '@/components/EventWhenFields';
 import { buildTimeline, whenFromEvent, type WhenValue } from '@/lib/eventWhen';
 import { useEpfs } from '@/hooks/useEpfs';
-import { eventEnd, eventStart, formatEventDate, formatEventDateRange, formatEventTimeRange, isTba } from '@/lib/eventDates';
+import { eventEnd, eventStart, formatEventDate, formatEventDateRange, formatEventTimeRange, isProject, isTba } from '@/lib/eventDates';
 
 /** Calendar chip colours, keyed by event progression status. */
 const STATUS_CHIP_CLASSES: Record<EventStatus, string> = {
@@ -148,8 +148,10 @@ export function EventsView() {
   const { toast } = useToast();
 
   // Data layer hook acts as the single source of truth across the app
-  const { data: allEvents, tba: tbaEvents, isLoading, error, createEvent, rsvpEvent, deleteEvent, canDelete } = useEvents();
+  const { data: rawEvents, tba: rawTba, isLoading, error, createEvent, rsvpEvent, deleteEvent, canDelete } = useEvents();
   const [deleting, setDeleting] = useState(false);
+  const allEvents = useMemo(() => rawEvents.filter((e) => !isProject(e)), [rawEvents]);
+  const tbaEvents = useMemo(() => rawTba.filter((e) => !isProject(e)), [rawTba]);
 
   const { byEvent: epfsByEvent, isLoading: epfsLoading, error: epfsError } = useEpfs();
   // Only claim "no EPF" once the list has actually loaded

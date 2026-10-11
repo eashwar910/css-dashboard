@@ -28,6 +28,12 @@ export function isTba(event: Pick<Event, 'startDateTime'>): boolean {
   return eventStart(event) === null;
 }
 
+/** Gilbot is a project, not an event: its Events row backs the Gilbot tab and is left out of event lists. */
+export const PROJECT_MATCH = /gil+bot/i;
+export function isProject(event: Pick<Event, 'title'>): boolean {
+  return PROJECT_MATCH.test(event.title);
+}
+
 /** Not yet over. TBA events are not "upcoming" (they have no date). */
 export function isUpcoming(event: Pick<Event, 'startDateTime' | 'endDateTime' | 'allDay'>, now = new Date()): boolean {
   const end = eventEnd(event);
