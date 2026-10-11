@@ -12,6 +12,8 @@ import {
   Wallet,
   Handshake,
   Package,
+  Bot,
+  Trophy,
   Menu,
   LogOut,
   Sun,
@@ -23,7 +25,7 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/components/ThemeProvider';
 
-export type View = 'home' | 'weekly' | 'events' | 'meetings' | 'team' | 'finance' | 'external' | 'logistics';
+export type View = 'home' | 'weekly' | 'events' | 'meetings' | 'team' | 'finance' | 'external' | 'logistics' | 'gilbot' | 'nottshack';
 
 interface NavbarProps {
   currentView: View;
@@ -41,6 +43,8 @@ const navItems: { id: View; label: string; icon: typeof Home }[] = [
   { id: 'team', label: 'Team', icon: Users },
   { id: 'finance', label: 'Finance', icon: Wallet },
   { id: 'external', label: 'External Relations', icon: Handshake },
+  { id: 'gilbot', label: 'Gilbot', icon: Bot },
+  { id: 'nottshack', label: 'NottsHack', icon: Trophy },
   { id: 'logistics', label: 'Logistics', icon: Package },
 ];
 
@@ -129,7 +133,7 @@ export function Navbar({ currentView, onNavigate, searchQuery, onSearchChange }:
 
         {/* Desktop account — signed-in member, log out, theme toggle */}
         <div className="hidden shrink-0 items-center gap-4 xl:flex">
-          <div className="whitespace-nowrap text-right">
+          <div className="hidden whitespace-nowrap text-right 2xl:block">
             <p className="text-sm font-medium leading-tight">{displayName}</p>
             {member?.role && (
               <p className="text-xs text-muted-foreground">{member.role}</p>

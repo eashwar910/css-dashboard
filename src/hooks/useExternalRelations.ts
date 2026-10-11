@@ -12,6 +12,8 @@ import { useApiResource } from '@/hooks/useApiResource';
 
 export type RelationType = 'sponsor' | 'partner' | 'speaker';
 
+export type Project = 'Gilbot' | 'NottsHack';
+
 export interface ExternalRelation {
   id: string;
   name: string;
@@ -23,6 +25,8 @@ export interface ExternalRelation {
   opsMyr: number | null;
   sponsorshipFormUrl: string | null;
   proofOfPaymentUrl: string | null;
+  /** The flagship event page it belongs to (Notion `Project`), or null. */
+  project: Project | null;
   /** The Notion page. */
   url: string;
 }

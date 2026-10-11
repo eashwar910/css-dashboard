@@ -2,6 +2,7 @@
 // `Type of Relation` is Sponsor, Partner or Speaker. Sponsors use the money and
 // paperwork fields; partners use `Value Provided` (free text, e.g. AI credits),
 // and speakers use it for their talk details (topic, organisation, contact).
+// `Project` (Gilbot / NottsHack) ties a row to one of those event pages.
 // Any committee member may add, edit or delete a relation; rows have no owner.
 
 import type { CreatePageParameters, PageObjectResponse } from '@notionhq/client';
@@ -10,6 +11,9 @@ import { cacheInvalidate, cached, dataSourceId, notion, queryAll, retrievePageIn
 import { number, richText, select, title, url, write } from './props.js';
 
 export type RelationTypeDto = 'sponsor' | 'partner' | 'speaker';
+
+/** `Project` options: the flagship events with their own tab. */
+export const PROJECTS = ['Gilbot', 'NottsHack'] as const;
 
 export interface ExternalRelationDto {
   id: string;
@@ -21,6 +25,8 @@ export interface ExternalRelationDto {
   opsMyr: number | null;
   sponsorshipFormUrl: string | null;
   proofOfPaymentUrl: string | null;
+  /** `Project` option name, or null. */
+  project: string | null;
   /** The Notion page. */
   url: string;
 }
@@ -40,6 +46,7 @@ export function toExternalRelation(page: PageObjectResponse): ExternalRelationDt
     opsMyr: number(page, 'Ops Amount (MYR)'),
     sponsorshipFormUrl: url(page, 'Sponsorship Form'),
     proofOfPaymentUrl: url(page, 'Proof of Payment'),
+    project: select(page, 'Project'),
     url: page.url,
   };
 }
@@ -66,6 +73,7 @@ export interface ExternalRelationInput {
   opsMyr?: unknown;
   sponsorshipFormUrl?: unknown;
   proofOfPaymentUrl?: unknown;
+  project?: unknown;
   /** Create only: Markdown for the page body (the notes). Later edits go through /api/event-content. */
   notes?: unknown;
 }
@@ -80,6 +88,12 @@ function parseName(value: unknown): string {
 function parseType(value: unknown): RelationTypeDto {
   if (value === 'sponsor' || value === 'partner' || value === 'speaker') return value;
   throw new HttpError(400, "Type must be 'sponsor', 'partner' or 'speaker'");
+}
+
+function parseProject(value: unknown): string | null {
+  if (value === null || value === '') return null;
+  if ((PROJECTS as readonly unknown[]).includes(value)) return value as string;
+  throw new HttpError(400, `Project must be one of: ${PROJECTS.join(', ')}`);
 }
 
 function parseText(value: unknown, label: string): string | null {
@@ -118,6 +132,7 @@ function toProperties(input: ExternalRelationInput, requireAll: boolean): NonNul
   if ('opsMyr' in input) props['Ops Amount (MYR)'] = write.number(parseAmount(input.opsMyr, 'Ops amount'));
   if ('sponsorshipFormUrl' in input) props['Sponsorship Form'] = { url: parseLink(input.sponsorshipFormUrl, 'Sponsorship form') };
   if ('proofOfPaymentUrl' in input) props['Proof of Payment'] = { url: parseLink(input.proofOfPaymentUrl, 'Proof of payment') };
+  if ('project' in input) props.Project = write.select(parseProject(input.project));
   return props;
 }
 

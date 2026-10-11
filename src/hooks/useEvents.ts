@@ -27,6 +27,7 @@ interface EventsResponse {
     allDay: boolean;
     location: string | null;
     status: EventStatus | null;
+    stage: string | null;
     url: string;
   }[];
 }
@@ -44,6 +45,7 @@ function toEvent(dto: EventDto): Event {
     agenda: [],
     rsvpCount: 0,
     status: dto.status ?? undefined,
+    stage: dto.stage ?? undefined,
     notionUrl: dto.url,
     todos: [],
     financeItems: [],
@@ -76,6 +78,8 @@ export interface EventEdit {
   start?: string | null;
   end?: string | null;
   location?: string | null;
+  /** One of EVENT_STAGES, or null to clear. */
+  stage?: string | null;
 }
 
 export interface EventsResult extends AsyncResult<Event[]> {

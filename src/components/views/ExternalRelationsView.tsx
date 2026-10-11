@@ -195,7 +195,10 @@ export function ExternalRelationsView() {
                   <article key={s.id} className="flex items-start gap-4 py-4">
                     <Handshake className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-sm font-medium text-foreground">{s.name}</h3>
+                      <h3 className="text-sm font-medium text-foreground">
+                        {s.name}
+                        {s.project && <span className="ml-2 text-[11px] font-normal text-primary">{s.project}</span>}
+                      </h3>
                       <div className="mt-1.5 grid gap-x-8 gap-y-1 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
                         <span>
                           Bounty: <span className="text-foreground">{formatBounty(s.bountyMyr)}</span>

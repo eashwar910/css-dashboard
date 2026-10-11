@@ -1,9 +1,9 @@
 // /api/external-relations
 //   GET                  sponsors, partners and speakers → { relations }
 //   POST                 create { name, type, valueProvided?, bountyMyr?, opsMyr?,
-//                        sponsorshipFormUrl?, proofOfPaymentUrl?, notes? } → { relation }
+//                        sponsorshipFormUrl?, proofOfPaymentUrl?, project?, notes? } → { relation }
 //                        notes: Markdown for the page body
-//   PATCH  ?id=<page id> edit any of those fields except notes → { relation }
+//   PATCH  ?id=<page id> edit any of those fields (and project) except notes → { relation }
 //                        (notes are the page body: GET/PUT /api/event-content)
 //   DELETE ?id=<page id> move to Notion's trash → { ok: true }
 

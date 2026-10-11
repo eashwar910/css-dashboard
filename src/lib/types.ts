@@ -116,6 +116,8 @@ export interface Event {
   rsvpCount: number;
   /** Progression status label. Undefined for an unrecognised Notion status. */
   status?: EventStatus;
+  /** Notion `Stage` (e.g. "Sponsor discovery"); undefined when unset. */
+  stage?: string;
   /** Link to the event's Notion page. */
   notionUrl?: string;
   /** Per-event to-do items */

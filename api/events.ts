@@ -1,7 +1,7 @@
 // /api/events (Team Dashboard > Events only; meetings are /api/meetings)
 //   GET                   every event → { events, canDelete }
 //   POST                  create an event { title, start?, end?, location?, status? } → { event }
-//   PATCH ?id=<page id>   edit { title?, status?, start?, end?, location? } (start null = TBA) → { event }
+//   PATCH ?id=<page id>   edit { title?, status?, start?, end?, location?, stage? } (start null = TBA) → { event }
 //   DELETE ?id=<page id>  move to Notion's trash (organisers only) → { ok: true }
 
 import { requireCommittee } from './_lib/auth.js';

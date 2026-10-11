@@ -7,7 +7,7 @@ import { HttpError } from './http.js';
 import { isOrganiser, ORGANISER_ONLY } from './roles.js';
 import { cacheInvalidate, dataSourceId, notion, retrievePageIn } from './notion.js';
 import { write } from './props.js';
-import { toEvent, type EventDto, type EventStatusDto } from './events.js';
+import { EVENT_STAGES, toEvent, type EventDto, type EventStatusDto } from './events.js';
 
 /** Dashboard status → exact Notion `Status` option. */
 const NOTION_STATUS: Record<EventStatusDto, string> = {
@@ -99,10 +99,17 @@ export interface EventEdit {
   start?: unknown;
   end?: unknown;
   location?: unknown;
+  stage?: unknown;
+}
+
+function parseStage(value: unknown): string | null {
+  if (value === null) return null;
+  if ((EVENT_STAGES as readonly unknown[]).includes(value)) return value as string;
+  throw new HttpError(400, `Stage must be one of: ${EVENT_STAGES.join(', ')}`);
 }
 
 /**
- * Edit an event's title, status, Timeline (send start and end together;
+ * Edit an event's title, status, Stage, Timeline (send start and end together;
  * start null = TBA) and/or Location. Any committee member may, like creating one.
  */
 export async function updateEvent(id: string, edit: EventEdit): Promise<EventDto> {
@@ -114,6 +121,7 @@ export async function updateEvent(id: string, edit: EventEdit): Promise<EventDto
     properties.Timeline = write.date(timeline.start, timeline.end);
   }
   if ('location' in edit) properties.Location = write.richText(parseLocation(edit.location));
+  if ('stage' in edit) properties.Stage = write.select(parseStage(edit.stage));
   if (!Object.keys(properties).length) throw new HttpError(400, 'Nothing to update');
 
   if (!(await retrievePageIn('events', id))) throw new HttpError(404, 'Event not found');

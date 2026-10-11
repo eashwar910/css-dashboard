@@ -148,7 +148,7 @@ export function EventsView() {
   const { toast } = useToast();
 
   // Data layer hook acts as the single source of truth across the app
-  const { data: allEvents, tba: tbaEvents, isLoading, error, createEvent, rsvpEvent, saveEvent, deleteEvent, canDelete } = useEvents();
+  const { data: allEvents, tba: tbaEvents, isLoading, error, createEvent, rsvpEvent, deleteEvent, canDelete } = useEvents();
   const [deleting, setDeleting] = useState(false);
 
   const { byEvent: epfsByEvent, isLoading: epfsLoading, error: epfsError } = useEpfs();
@@ -459,40 +459,8 @@ export function EventsView() {
             )}
 
             {/* ── Progression Status ── */}
-            <div className="flex items-center gap-2 pt-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status:</span>
-              {(['scheduled', 'planning-in-progress', 'done'] as EventStatus[]).map((s) => {
-                const isActive = (activeSelectedEvent.status ?? 'scheduled') === s;
-                const colors: Record<EventStatus, string> = {
-                  'scheduled': 'border-border text-muted-foreground hover:border-foreground hover:text-foreground',
-                  'planning-in-progress': 'border-amber-500/60 text-amber-600 hover:border-amber-500 hover:text-amber-600',
-                  'done': 'border-emerald-500/60 text-emerald-600 hover:border-emerald-500 hover:text-emerald-600',
-                };
-                const activeColors: Record<EventStatus, string> = {
-                  'scheduled': 'bg-foreground text-background border-foreground',
-                  'planning-in-progress': 'bg-amber-500 text-white border-amber-500',
-                  'done': 'bg-emerald-500 text-white border-emerald-500',
-                };
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    disabled={isActive}
-                    aria-pressed={isActive}
-                    onClick={() =>
-                      saveEvent(activeSelectedEvent.id, { status: s }).catch((err: unknown) =>
-                        toast({ title: "Couldn't change the status", description: (err as Error).message, variant: 'destructive' })
-                      )
-                    }
-                    className={cn(
-                      'border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors disabled:cursor-default',
-                      isActive ? activeColors[s] : colors[s]
-                    )}
-                  >
-                    {STATUS_LABELS[s]}
-                  </button>
-                );
-              })}
+            <div className="pt-1">
+              <EventStatusPicker event={activeSelectedEvent} />
             </div>
 
             {/* ── Inner Tab Nav: Overview / To-do / Finance Reports ── */}
@@ -696,10 +664,57 @@ export function EventsView() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// EventStatusPicker — Not started / In progress / Done, saved to Notion
+// ─────────────────────────────────────────────────────────────────────────────
+
+const STATUS_COLORS: Record<EventStatus, string> = {
+  'scheduled': 'border-border text-muted-foreground hover:border-foreground hover:text-foreground',
+  'planning-in-progress': 'border-amber-500/60 text-amber-600 hover:border-amber-500 hover:text-amber-600',
+  'done': 'border-emerald-500/60 text-emerald-600 hover:border-emerald-500 hover:text-emerald-600',
+};
+const STATUS_ACTIVE_COLORS: Record<EventStatus, string> = {
+  'scheduled': 'bg-foreground text-background border-foreground',
+  'planning-in-progress': 'bg-amber-500 text-white border-amber-500',
+  'done': 'bg-emerald-500 text-white border-emerald-500',
+};
+
+export function EventStatusPicker({ event }: { event: Event }) {
+  const { saveEvent } = useEvents();
+  const { toast } = useToast();
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status:</span>
+      {(['scheduled', 'planning-in-progress', 'done'] as EventStatus[]).map((s) => {
+        const isActive = (event.status ?? 'scheduled') === s;
+        return (
+          <button
+            key={s}
+            type="button"
+            disabled={isActive}
+            aria-pressed={isActive}
+            onClick={() =>
+              saveEvent(event.id, { status: s }).catch((err: unknown) =>
+                toast({ title: "Couldn't change the status", description: (err as Error).message, variant: 'destructive' })
+              )
+            }
+            className={cn(
+              'border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors disabled:cursor-default',
+              isActive ? STATUS_ACTIVE_COLORS[s] : STATUS_COLORS[s]
+            )}
+          >
+            {STATUS_LABELS[s]}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // EventDetailsEditor — name, date/time (or TBA) and location, saved to Notion
 // ─────────────────────────────────────────────────────────────────────────────
 
-function EventDetailsEditor({ event, onDone }: { event: Event; onDone: () => void }) {
+export function EventDetailsEditor({ event, onDone }: { event: Event; onDone: () => void }) {
   const { saveEvent } = useEvents();
   const { toast } = useToast();
   const [title, setTitle] = useState(event.title);
@@ -779,7 +794,7 @@ function EventDetailsEditor({ event, onDone }: { event: Event; onDone: () => voi
 // EventTodoPanel — per-event to-do list
 // ─────────────────────────────────────────────────────────────────────────────
 
-function EventTodoPanel({ eventId }: { eventId: string }) {
+export function EventTodoPanel({ eventId }: { eventId: string }) {
   const [newText, setNewText] = useState('');
   const [adding, setAdding] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -916,7 +931,7 @@ function EventTodoPanel({ eventId }: { eventId: string }) {
 // EventFinancePanel — per-event finance / budget tracker
 // ─────────────────────────────────────────────────────────────────────────────
 
-function EventFinancePanel({ eventId }: { eventId: string }) {
+export function EventFinancePanel({ eventId }: { eventId: string }) {
   const { forEvent, totalsForEvent, isLoading, error } = useFinance();
   const transactions = forEvent(eventId);
 

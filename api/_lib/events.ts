@@ -3,9 +3,12 @@
 
 import type { PageObjectResponse } from '@notionhq/client';
 import { cached, dataSourceId, queryAll } from './notion.js';
-import { date, richText, status, title, type DateValue } from './props.js';
+import { date, richText, select, status, title, type DateValue } from './props.js';
 
 export type EventStatusDto = 'scheduled' | 'planning-in-progress' | 'done';
+
+/** `Stage` options, in order (Gilbot and NottsHack pages). */
+export const EVENT_STAGES = ['Ideation', 'Sponsor discovery', 'Sponsor outreach', 'Planning', 'Execution', 'Wrap-up'] as const;
 
 export interface EventDto {
   id: string;
@@ -18,6 +21,8 @@ export interface EventDto {
   location: string | null;
   /** null for an unrecognised Notion status. */
   status: EventStatusDto | null;
+  /** `Stage` option name, or null when unset. */
+  stage: string | null;
   /** The Notion page, for "Open in Notion" links. */
   url: string;
 }
@@ -44,6 +49,7 @@ export function toEvent(page: PageObjectResponse): EventDto {
     ...dates(date(page, 'Timeline')),
     location: richText(page, 'Location'),
     status: notionStatus ? STATUS_MAP[notionStatus] ?? null : null,
+    stage: select(page, 'Stage'),
     url: page.url,
   };
 }
