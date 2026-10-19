@@ -49,6 +49,10 @@ const details: Record<string, MemberDetails> = {
   '3fea80c6-3b0a-8135-af75-d600bcfeb302': { year: null },
   // Thu Eain San
   '3fea80c6-3b0a-813e-a3af-cfb652481da2': { year: null },
+  // Mohamed Radzi bin Mohamed Saleh
+  '3fea80c6-3b0a-81bd-9ab7-f407b60bc637': { year: null },
+  // Zachary Sim Kah Yao
+  '3fea80c6-3b0a-81a8-b6c1-d2603c4c6db2': { year: null },
 };
 
 const normaliseId = (id: string) => id.replace(/-/g, '').toLowerCase();
