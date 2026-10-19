@@ -11,7 +11,6 @@ import { FinanceView } from '@/components/views/FinanceView';
 import { ExternalRelationsView } from '@/components/views/ExternalRelationsView';
 import { LogisticsView } from '@/components/views/LogisticsView';
 import { FlagshipView } from '@/components/views/FlagshipView';
-import { GilbotView } from '@/components/views/GilbotView';
 import { Sun, Moon } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { TaskRequestNotifications } from '@/components/TaskRequestNotifications';
@@ -61,7 +60,6 @@ function Dashboard() {
           {view === 'team' && <TeamView />}
           {view === 'finance' && <FinanceView />}
           {view === 'external' && <ExternalRelationsView />}
-          {view === 'gilbot' && <GilbotView />}
           {view === 'nottshack' && (
             <FlagshipView key="nottshack" project="NottsHack" match={/notts\s*hack/i} blurb="Everything for NottsHack in one place: status, stage, sponsors, overview, to-dos and finance." />
           )}

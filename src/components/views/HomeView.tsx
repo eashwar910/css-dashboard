@@ -95,7 +95,7 @@ export interface HomeViewProps {
 
 export function HomeView({ onNavigate, searchQuery = '', onSearchChange }: HomeViewProps = {}) {
   const { upcoming: rawUpcoming, tba: rawTba, data: rawEvents, isLoading: eventsLoading, error: eventsError, deleteEvent, canDelete } = useEvents();
-  // Gilbot is a project with its own tab, not an event
+  // Gilbot is a project, not an event
   const upcomingEvents = useMemo(() => rawUpcoming.filter((e) => !isProject(e)), [rawUpcoming]);
   const tbaEvents = useMemo(() => rawTba.filter((e) => !isProject(e)), [rawTba]);
   const allEvents = useMemo(() => rawEvents.filter((e) => !isProject(e)), [rawEvents]);

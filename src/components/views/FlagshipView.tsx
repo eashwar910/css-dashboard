@@ -233,7 +233,7 @@ export function SponsorTracker({ project }: { project: Project }) {
 }
 
 /**
- * One page for a flagship event (NottsHack; Gilbot has GilbotView): its Events row (status,
+ * One page for a flagship event (NottsHack): its Events row (status,
  * stage, overview, to-dos, finance) plus its sponsors from External Relations, and
  * sub-events by stage (each with its EPF).
  */

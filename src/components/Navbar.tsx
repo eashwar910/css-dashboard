@@ -12,7 +12,6 @@ import {
   Wallet,
   Handshake,
   Package,
-  Bot,
   Trophy,
   Menu,
   LogOut,
@@ -25,7 +24,7 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/components/ThemeProvider';
 
-export type View = 'home' | 'weekly' | 'events' | 'meetings' | 'team' | 'finance' | 'external' | 'logistics' | 'gilbot' | 'nottshack';
+export type View = 'home' | 'weekly' | 'events' | 'meetings' | 'team' | 'finance' | 'external' | 'logistics' | 'nottshack';
 
 interface NavbarProps {
   currentView: View;
@@ -43,7 +42,6 @@ const navItems: { id: View; label: string; icon: typeof Home }[] = [
   { id: 'team', label: 'Team', icon: Users },
   { id: 'finance', label: 'Finance', icon: Wallet },
   { id: 'external', label: 'External Relations', icon: Handshake },
-  { id: 'gilbot', label: 'Gilbot', icon: Bot },
   { id: 'nottshack', label: 'NottsHack', icon: Trophy },
   { id: 'logistics', label: 'Logistics', icon: Package },
 ];
