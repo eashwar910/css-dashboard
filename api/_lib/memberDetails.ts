@@ -31,7 +31,7 @@ const details: Record<string, MemberDetails> = {
   '381a80c6-3b0a-803c-94da-d3169747c534': { year: null },
   // John Tiong Sie Ho
   '381a80c6-3b0a-8084-9e27-ed5d8ef3106d': { year: null },
-  // Yau Jia Wei
+  // Muhammad Raza
   '381a80c6-3b0a-8070-acf5-d39ca96f1772': { year: null },
   // Fathima Sakinah Dil Fairaz
   '381a80c6-3b0a-8004-9f52-f654a43ff513': { year: null },
@@ -43,8 +43,12 @@ const details: Record<string, MemberDetails> = {
   '381a80c6-3b0a-8007-acd4-ebcebb014c79': { year: null },
   // Muhammad Sajid Desai
   '3c0a80c6-3b0a-806f-a410-d592fe9f7808': { year: null },
-  // Logistic Office
+  // Quek Jia Wen
   '3cda80c6-3b0a-80bd-87c3-df9ce8fb4c81': { year: null },
+  // Aung Kaung Myat
+  '3fea80c6-3b0a-8135-af75-d600bcfeb302': { year: null },
+  // Thu Eain San
+  '3fea80c6-3b0a-813e-a3af-cfb652481da2': { year: null },
 };
 
 const normaliseId = (id: string) => id.replace(/-/g, '').toLowerCase();
