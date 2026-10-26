@@ -26,6 +26,29 @@ export function normaliseName(name: string): string {
   return name.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+export interface CommitteeRosterRecord {
+  name: string;
+  email: string | null;
+  role: string | null;
+}
+
+/** Active committee members from the full Supabase directory. Cached 60s. */
+export async function committeeRosterRecords(): Promise<CommitteeRosterRecord[]> {
+  const client = supabaseAdmin();
+  if (!client) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required to load the committee roster');
+  return cached('supabase:committeeRoster', async () => {
+    const { data, error } = await client.from('committee_members').select('full_name, email, role, active');
+    if (error) throw new Error(`committee_members roster read failed: ${error.message}`);
+    return (data ?? [])
+      .filter((row) => row.active !== false && typeof row.full_name === 'string' && row.full_name.trim())
+      .map((row) => ({
+        name: row.full_name.trim(),
+        email: typeof row.email === 'string' && row.email.trim() ? row.email.trim().toLowerCase() : null,
+        role: typeof row.role === 'string' ? row.role : null,
+      }));
+  });
+}
+
 /**
  * committee_members login email (lowercased) → notion_email, for members
  * whose Notion account uses a different email. Cached 60s. null without the key.

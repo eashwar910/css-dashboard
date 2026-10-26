@@ -7,16 +7,27 @@
 // Anyone not listed comes after, in whatever order they were in.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ORDER: string[][] = [
-  ['jack', 'lee yoonjae'],
-  ['selina'],
+export const ORDER: readonly (readonly string[])[] = [
+  ['jack'],
+  ['lee yoonjae'],
+  ['selina yeoh yun ci', 'selina'],
   ['min pyae phyo', 'minpyaephyo'],
-  ['john'],
-  ['sakinah'],
-  ['faysal'],
-  ['chloe', 'wong zi xin'],
-  ['jia wei'],
+  ['john tiong', 'john'],
+  ['muhammad faysal', 'faysal'],
+  ['fathima sakinah', 'sakinah'],
+  ['eashwar siddha satish nath', 'eashwar siddha satish', 'eashwar siddha', 'eashwar'],
+  ['wong zi xin', 'chloe'],
+  ['muhammad sajid desai', 'muhammad sajid', 'sajid desai', 'sajid'],
+  ['muhammad raza', 'raza'],
+  ['quek jia wei', 'jia wei'],
   ['jia wen', 'wen'],
+];
+
+export const JUNIOR_COMMITTEE: readonly (readonly string[])[] = [
+  ['aung kaung myat', 'aung kaung', 'aung'],
+  ['thu eain san', 'thu eain', 'eain san', 'thu'],
+  ['mohamed radzi bin mohamed saleh', 'mohamed radzi', 'radzi'],
+  ['zachary sim kah yao', 'zachary sim', 'zachary'],
 ];
 
 function words(name: string): string {

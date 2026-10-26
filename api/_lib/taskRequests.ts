@@ -9,10 +9,10 @@ import { HttpError } from './http.js';
 import { cacheInvalidate, dataSourceId, notion, queryAll, retrievePageIn } from './notion.js';
 import { date, people, select, title, write } from './props.js';
 import { ASSIGNER_ROLES, hasAnyRole } from './roles.js';
-import { loadTeam } from './team.js';
 import { createTask } from './taskWrites.js';
 import type { TaskDto } from './tasks.js';
 import { getNotionUserIdForMemberEmail, notionUserIdFor } from './users.js';
+import { committeeRosterRecords } from './supabaseAdmin.js';
 
 export interface TaskRequestDto {
   id: string;
@@ -46,10 +46,12 @@ async function requireAssigner(member: CommitteeMember) {
   }
 }
 
-/** Everyone else on the ExCo with a committee email, for the assignee dropdown. */
+/** Everyone else in the active committee directory with a committee email. */
 export async function assignableMembers(member: CommitteeMember): Promise<AssignableMemberDto[]> {
   const self = new Set([member.email, member.notionEmail].filter(Boolean));
-  const team = (await loadTeam()).filter((m): m is typeof m & { email: string } => !!m.email && !self.has(m.email.toLowerCase()));
+  const team = (await committeeRosterRecords()).filter((m): m is typeof m & { email: string } =>
+    !!m.email && !self.has(m.email.toLowerCase())
+  );
   const members = await Promise.all(
     team.map(async (m) => ({ email: m.email, name: m.name, role: m.role, notionUserId: await getNotionUserIdForMemberEmail(m.email) })),
   );

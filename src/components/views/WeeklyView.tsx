@@ -10,8 +10,9 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useTasks, type PersonGroup } from '@/hooks/useTasks';
 import { useTaskRequests } from '@/hooks/useTaskRequests';
-import { compareMembers } from '@/lib/memberOrder';
-import type { Task } from '@/lib/types';
+import { useApiResource } from '@/hooks/useApiResource';
+import { compareMembers, JUNIOR_COMMITTEE, ORDER } from '@/lib/memberOrder';
+import type { CommitteeRosterMember, Task } from '@/lib/types';
 import { TaskEditDialog } from '@/components/TaskEditDialog';
 import { parseDate } from '@/lib/eventDates';
 
@@ -33,6 +34,21 @@ function weekRange(startIso: string | null) {
 function beforeWeek(startIso: string | null) {
   const start = parseDate(startIso);
   return start ? `Before ${format(start, 'MMM d')}` : '';
+}
+
+function normalizeName(name: string): string {
+  return name.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+}
+
+function matchesRoster(name: string, roster: readonly (readonly string[])[]): boolean {
+  const normalizedName = normalizeName(name);
+  return normalizedName.length > 0 && roster.some((aliases) =>
+    aliases.some((alias) => {
+      const normalizedAlias = normalizeName(alias);
+      return normalizedAlias.length > 0
+        && (normalizedName.includes(normalizedAlias) || normalizedAlias.includes(normalizedName));
+    })
+  );
 }
 
 function TaskRow({ task, onToggle, onEdit }: { task: Task; onToggle: (id: string) => void; onEdit: (task: Task) => void }) {
@@ -293,19 +309,44 @@ export function WeeklyView() {
     error,
   } = useTasks();
   const { canAssign, members } = useTaskRequests();
+  const { data: rosterResponse, isLoading: isRosterLoading, error: rosterError } =
+    useApiResource<{ members: CommitteeRosterMember[] }>('committee-roster');
+  const roster = rosterResponse?.members ?? [];
   const { member } = useAuth();
   const { toast } = useToast();
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [activeCommittee, setActiveCommittee] = useState<'Executive Committee' | 'Junior Committee'>('Executive Committee');
 
-  // Empty boxes too, so there's somewhere to add: your own, and everyone's for those who can assign.
+  // Include every active directory member, even when they have no current tasks.
   const extraPeople: Person[] = [
+    ...roster.map((rosterMember) => {
+      const matchingGroup = [...thisWeekGroups, ...overdueGroups].find((group) =>
+        (rosterMember.notionUserId && group.key === rosterMember.notionUserId)
+        || matchesRoster(group.name, [[rosterMember.name]])
+      );
+      return {
+        key: matchingGroup?.key ?? rosterMember.notionUserId ?? `member:${rosterMember.email ?? normalizeName(rosterMember.name)}`,
+        name: matchingGroup?.name ?? rosterMember.name,
+        isMe: matchingGroup?.isMe ?? rosterMember.notionUserId === notionUserId,
+      };
+    }),
     ...(notionUserId ? [{ key: notionUserId, name: member?.full_name ?? 'You', isMe: true }] : []),
     ...(canAssign
       ? members.filter((m) => m.notionUserId).map((m) => ({ key: m.notionUserId!, name: m.name, isMe: false }))
       : []),
   ];
-  const emailFor = (key: string) => members.find((m) => m.notionUserId === key)?.email;
+  const emailFor = (key: string) =>
+    roster.find((rosterMember) => rosterMember.notionUserId === key || `member:${rosterMember.email ?? normalizeName(rosterMember.name)}` === key)?.email
+    ?? members.find((m) => m.notionUserId === key)?.email;
+  const allRows = personRows(thisWeekGroups, overdueGroups, extraPeople);
+  const rows = allRows.filter((row) => {
+    const isExecutiveMember = matchesRoster(row.name, ORDER);
+    const isNamedJuniorMember = matchesRoster(row.name, JUNIOR_COMMITTEE);
+    return activeCommittee === 'Executive Committee'
+      ? isExecutiveMember && !isNamedJuniorMember
+      : isNamedJuniorMember || !isExecutiveMember;
+  });
 
   const handleToggleTask = (id: string) => {
     toggleTask(id).catch((err: unknown) =>
@@ -327,10 +368,10 @@ export function WeeklyView() {
         </p>
       </header>
 
-      {error ? (
+      {error || rosterError ? (
         <div className="flex items-center gap-2 text-xs text-destructive">
           <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>Couldn't load tasks — try refreshing.</span>
+          <span>{rosterError ? "Couldn't load the committee directory — try refreshing." : "Couldn't load tasks — try refreshing."}</span>
         </div>
       ) : (
         <div>
@@ -354,11 +395,30 @@ export function WeeklyView() {
             </div>
           </div>
 
-          {isLoading ? (
+          <div className="mb-5 inline-flex rounded-md border border-border bg-muted/30 p-1" role="group" aria-label="Committee">
+            {(['Executive Committee', 'Junior Committee'] as const).map((committee) => (
+              <button
+                key={committee}
+                type="button"
+                aria-pressed={activeCommittee === committee}
+                onClick={() => setActiveCommittee(committee)}
+                className={cn(
+                  'rounded px-3 py-1.5 text-sm font-medium transition-colors',
+                  activeCommittee === committee
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                )}
+              >
+                {committee}
+              </button>
+            ))}
+          </div>
+
+          {isLoading || isRosterLoading ? (
             <GroupsSkeleton />
           ) : (
             <PersonBoxes
-              rows={personRows(thisWeekGroups, overdueGroups, extraPeople)}
+              rows={rows}
               emailFor={emailFor}
               canAssign={canAssign}
               onToggle={handleToggleTask}

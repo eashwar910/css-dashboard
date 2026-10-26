@@ -203,6 +203,14 @@ export interface TeamMember {
   avatarUrl?: string;
 }
 
+/** Active committee directory entry used by Weekly, including members outside ExCo. */
+export interface CommitteeRosterMember {
+  name: string;
+  email: string | null;
+  role: string | null;
+  notionUserId: string | null;
+}
+
 // ── Document ─────────────────────────────────────────────────────────────────
 
 export interface Document {
