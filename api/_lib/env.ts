@@ -4,7 +4,7 @@
 /** Thrown when a required env var is missing. http.ts turns it into a generic 500. */
 export class ConfigError extends Error {
   constructor(public readonly variable: string) {
-    super(`Missing required environment variable ${variable}. Add it to .env.local (see .env.example).`);
+    super(`Missing required environment variable ${variable}. Add it to .env (see .env.example).`);
     this.name = 'ConfigError';
   }
 }
