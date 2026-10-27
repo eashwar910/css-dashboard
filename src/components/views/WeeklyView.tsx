@@ -11,7 +11,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTasks, type PersonGroup } from '@/hooks/useTasks';
 import { useTaskRequests } from '@/hooks/useTaskRequests';
 import { useApiResource } from '@/hooks/useApiResource';
-import { compareMembers, JUNIOR_COMMITTEE, ORDER } from '@/lib/memberOrder';
+import { compareMembers, isJuniorCommittee, sameName } from '@/lib/memberOrder';
 import type { CommitteeRosterMember, Task } from '@/lib/types';
 import { TaskEditDialog } from '@/components/TaskEditDialog';
 import { parseDate } from '@/lib/eventDates';
@@ -38,17 +38,6 @@ function beforeWeek(startIso: string | null) {
 
 function normalizeName(name: string): string {
   return name.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
-}
-
-function matchesRoster(name: string, roster: readonly (readonly string[])[]): boolean {
-  const normalizedName = normalizeName(name);
-  return normalizedName.length > 0 && roster.some((aliases) =>
-    aliases.some((alias) => {
-      const normalizedAlias = normalizeName(alias);
-      return normalizedAlias.length > 0
-        && (normalizedName.includes(normalizedAlias) || normalizedAlias.includes(normalizedName));
-    })
-  );
 }
 
 function TaskRow({ task, onToggle, onEdit }: { task: Task; onToggle: (id: string) => void; onEdit: (task: Task) => void }) {
@@ -310,7 +299,7 @@ export function WeeklyView() {
   } = useTasks();
   const { canAssign, members } = useTaskRequests();
   const { data: rosterResponse, isLoading: isRosterLoading, error: rosterError } =
-    useApiResource<{ members: CommitteeRosterMember[] }>('committee-roster');
+    useApiResource<{ members: CommitteeRosterMember[] }>('team?roster=1');
   const roster = rosterResponse?.members ?? [];
   const { member } = useAuth();
   const { toast } = useToast();
@@ -323,7 +312,7 @@ export function WeeklyView() {
     ...roster.map((rosterMember) => {
       const matchingGroup = [...thisWeekGroups, ...overdueGroups].find((group) =>
         (rosterMember.notionUserId && group.key === rosterMember.notionUserId)
-        || matchesRoster(group.name, [[rosterMember.name]])
+        || sameName(group.name, rosterMember.name)
       );
       return {
         key: matchingGroup?.key ?? rosterMember.notionUserId ?? `member:${rosterMember.email ?? normalizeName(rosterMember.name)}`,
@@ -340,13 +329,8 @@ export function WeeklyView() {
     roster.find((rosterMember) => rosterMember.notionUserId === key || `member:${rosterMember.email ?? normalizeName(rosterMember.name)}` === key)?.email
     ?? members.find((m) => m.notionUserId === key)?.email;
   const allRows = personRows(thisWeekGroups, overdueGroups, extraPeople);
-  const rows = allRows.filter((row) => {
-    const isExecutiveMember = matchesRoster(row.name, ORDER);
-    const isNamedJuniorMember = matchesRoster(row.name, JUNIOR_COMMITTEE);
-    return activeCommittee === 'Executive Committee'
-      ? isExecutiveMember && !isNamedJuniorMember
-      : isNamedJuniorMember || !isExecutiveMember;
-  });
+  // Anyone not named in JUNIOR_COMMITTEE stays on the ExCo tab, so nobody new disappears.
+  const rows = allRows.filter((row) => isJuniorCommittee(row.name) === (activeCommittee === 'Junior Committee'));
 
   const handleToggleTask = (id: string) => {
     toggleTask(id).catch((err: unknown) =>

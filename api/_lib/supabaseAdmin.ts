@@ -32,10 +32,10 @@ export interface CommitteeRosterRecord {
   role: string | null;
 }
 
-/** Active committee members from the full Supabase directory. Cached 60s. */
+/** Active committee members from the full Supabase directory. Cached 60s. Empty without the key. */
 export async function committeeRosterRecords(): Promise<CommitteeRosterRecord[]> {
   const client = supabaseAdmin();
-  if (!client) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required to load the committee roster');
+  if (!client) return [];
   return cached('supabase:committeeRoster', async () => {
     const { data, error } = await client.from('committee_members').select('full_name, email, role, active');
     if (error) throw new Error(`committee_members roster read failed: ${error.message}`);
