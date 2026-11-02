@@ -218,6 +218,9 @@ function Toolbar({ editor, disabled }: { editor: Editor; disabled: boolean }) {
           <ToolbarButton title="Delete row" disabled={disabled} onClick={() => chain().deleteRow().run()}>
             <Rows3 className="h-3.5 w-3.5 text-destructive" />
           </ToolbarButton>
+          <ToolbarButton title="Delete column" disabled={disabled} onClick={() => chain().deleteColumn().run()}>
+            <Columns3 className="h-3.5 w-3.5 text-destructive" />
+          </ToolbarButton>
           <ToolbarButton title="Delete table" disabled={disabled} onClick={() => chain().deleteTable().run()}>
             <Trash2 className="h-3.5 w-3.5 text-destructive" />
           </ToolbarButton>
