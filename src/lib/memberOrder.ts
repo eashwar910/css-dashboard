@@ -59,3 +59,16 @@ export function sameName(a: string, b: string): boolean {
 export function compareMembers(a: string, b: string): number {
   return memberRank(a) - memberRank(b);
 }
+
+/** Weekly-tab sections. Aliases match like ORDER; anyone unlisted is shown above the sections. */
+export const DEPARTMENTS: readonly (readonly [string, readonly string[]])[] = [
+  ['Marketing', ['sakinah', 'faysal', 'chloe', 'wong zi xin', 'zachary']],
+  ['Events', ['raza', 'thu eain', 'eain san', 'jia wen', 'wen']],
+  ['Tech', ['eashwar', 'aung kaung', 'karon']],
+  ['Finance', ['john tiong', 'john']],
+];
+
+/** The DEPARTMENTS section a name belongs to, or undefined. */
+export function departmentOf(name: string): string | undefined {
+  return DEPARTMENTS.find(([, aliases]) => indexIn(name, [aliases]) !== -1)?.[0];
+}

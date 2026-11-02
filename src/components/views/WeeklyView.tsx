@@ -11,7 +11,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTasks, type PersonGroup } from '@/hooks/useTasks';
 import { useTaskRequests } from '@/hooks/useTaskRequests';
 import { useApiResource } from '@/hooks/useApiResource';
-import { compareMembers, isJuniorCommittee, sameName } from '@/lib/memberOrder';
+import { compareMembers, DEPARTMENTS, departmentOf, isJuniorCommittee, sameName } from '@/lib/memberOrder';
 import type { CommitteeRosterMember, Task } from '@/lib/types';
 import { TaskEditDialog } from '@/components/TaskEditDialog';
 import { parseDate } from '@/lib/eventDates';
@@ -240,28 +240,39 @@ function PersonBoxes({
   onEdit: (task: Task) => void;
 }) {
   if (rows.length === 0) return <p className="py-6 text-sm text-muted-foreground">No to-dos this week yet.</p>;
+  // Unassigned people first (no heading), then one section per department.
+  const sections = [undefined, ...DEPARTMENTS.map(([dept]) => dept)]
+    .map((dept) => ({ dept, rows: rows.filter((row) => departmentOf(row.name) === dept) }))
+    .filter((section) => section.rows.length > 0);
   return (
-    <div className="space-y-5">
-      {rows.map((row) => (
-        <section key={row.key} className="border border-border p-4 sm:p-5">
-          <h3 className="mb-3 font-serif text-xl font-semibold">
-            {row.name}
-            {row.isMe && <span className="ml-2 text-sm font-normal text-primary">(you)</span>}
-          </h3>
-          {(row.isMe || (canAssign && emailFor(row.key))) && (
-            <AddTaskForm name={row.name} isMe={row.isMe} assigneeEmail={emailFor(row.key)} />
+    <div className="space-y-10">
+      {sections.map((section) => (
+        <div key={section.dept ?? 'none'} className="space-y-5">
+          {section.dept && (
+            <h2 className="border-b border-border pb-2 font-serif text-2xl font-semibold">{section.dept}</h2>
           )}
-          <div className="grid gap-6 lg:grid-cols-2 lg:gap-10">
-            <div>
-              <ColumnLabel title="This week" tasks={row.thisWeek} />
-              <TaskList tasks={row.thisWeek} empty="Nothing this week." onToggle={onToggle} onEdit={onEdit} />
-            </div>
-            <div>
-              <ColumnLabel title="Last week" tasks={row.overdue} />
-              <TaskList tasks={row.overdue} empty="Nothing from last week." onToggle={onToggle} onEdit={onEdit} />
-            </div>
-          </div>
-        </section>
+          {section.rows.map((row) => (
+            <section key={row.key} className="border border-border p-4 sm:p-5">
+              <h3 className="mb-3 font-serif text-xl font-semibold">
+                {row.name}
+                {row.isMe && <span className="ml-2 text-sm font-normal text-primary">(you)</span>}
+              </h3>
+              {(row.isMe || (canAssign && emailFor(row.key))) && (
+                <AddTaskForm name={row.name} isMe={row.isMe} assigneeEmail={emailFor(row.key)} />
+              )}
+              <div className="grid gap-6 lg:grid-cols-2 lg:gap-10">
+                <div>
+                  <ColumnLabel title="This week" tasks={row.thisWeek} />
+                  <TaskList tasks={row.thisWeek} empty="Nothing this week." onToggle={onToggle} onEdit={onEdit} />
+                </div>
+                <div>
+                  <ColumnLabel title="Last week" tasks={row.overdue} />
+                  <TaskList tasks={row.overdue} empty="Nothing from last week." onToggle={onToggle} onEdit={onEdit} />
+                </div>
+              </div>
+            </section>
+          ))}
+        </div>
       ))}
     </div>
   );
