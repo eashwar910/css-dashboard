@@ -52,6 +52,24 @@ async function setReimbursementStatus(id: string, reimbursementStatus: Reimburse
   return res.transaction;
 }
 
+/** Save many transactions in one request (ledger import). Rows that fail come back in `failed`. */
+async function importTransactions(transactions: TransactionInput[]) {
+  const res = await apiFetch<{ created: number; failed: { index: number; error: string }[]; finance: FinanceData }>(
+    'finance?import=save',
+    { method: 'POST', body: JSON.stringify({ transactions }) }
+  );
+  store.update(() => res.finance);
+  return { created: res.created, failed: res.failed };
+}
+
+/** AI category/event guesses for ledger lines; empty (with a warning) when the AI is unavailable. */
+async function suggestLedger(rows: string[], events: string[]) {
+  return apiFetch<{ suggestions: { index: number; category: string | null; event: string | null }[]; warning: string | null }>(
+    'finance?import=suggest',
+    { method: 'POST', body: JSON.stringify({ rows, events }) }
+  );
+}
+
 /** Move to Notion's trash. The row disappears once the server confirms. */
 async function deleteTransaction(id: string) {
   const res = await apiFetch<{ finance: FinanceData }>(`finance?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
@@ -66,6 +84,8 @@ export interface FinanceResult extends AsyncResult<Transaction[]> {
   totalsForEvent: (eventId: string) => FinanceTotals;
   createTransaction: (input: TransactionInput) => Promise<{ transaction: Transaction; warning: string | null }>;
   setReimbursementStatus: (id: string, status: ReimbursementStatus) => Promise<Transaction>;
+  importTransactions: typeof importTransactions;
+  suggestLedger: typeof suggestLedger;
   /** Admins, or whoever recorded it (see Transaction.canDelete). */
   deleteTransaction: (id: string) => Promise<void>;
 }
@@ -94,5 +114,7 @@ export function useFinance(): FinanceResult {
     createTransaction,
     setReimbursementStatus,
     deleteTransaction,
+    importTransactions,
+    suggestLedger,
   };
 }

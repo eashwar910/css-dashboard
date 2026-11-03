@@ -1,6 +1,8 @@
 // /api/finance
 //   GET                    transactions + totals (overall, per event, unlinked) + canonical options
 //   POST                   create a transaction → { transaction, warning, finance }
+//   POST   ?import=suggest { rows: string[], events: string[] } → AI { suggestions, warning }
+//   POST   ?import=save    { transactions: TransactionInput[] } → { created, failed, finance }
 //   PATCH  ?id=<page id>   { reimbursementStatus } → { transaction, finance }
 //   DELETE ?id=<page id>   move to Notion trash → { finance }
 // Any committee member may add entries and change reimbursement status; only
@@ -9,7 +11,8 @@
 
 import { requireCommittee } from './_lib/auth.js';
 import { createTransaction, deleteTransaction, loadFinance, setReimbursementStatus, withPermissions } from './_lib/finance.js';
-import { jsonBody, pageIdParam, sendJson, withHandler } from './_lib/http.js';
+import { HttpError, jsonBody, pageIdParam, queryString, sendJson, withHandler } from './_lib/http.js';
+import { suggestForRows } from './_lib/ledgerAi.js';
 
 export default withHandler(
   ['GET', 'POST', 'PATCH', 'DELETE'],
@@ -23,6 +26,31 @@ export default withHandler(
         sendJson(res, 200, await finance());
         return;
       case 'POST': {
+        const mode = queryString(req, 'import');
+        if (mode === 'suggest') {
+          sendJson(res, 200, await suggestForRows(req, jsonBody(req)));
+          return;
+        }
+        if (mode === 'save') {
+          const list = jsonBody(req).transactions;
+          if (!Array.isArray(list) || list.length === 0 || list.length > 200) {
+            throw new HttpError(400, 'transactions must be a list of 1 to 200 entries');
+          }
+          // One at a time: Notion rate-limits, and a bad row shouldn't stop the rest.
+          let created = 0;
+          const failed: { index: number; error: string }[] = [];
+          for (const [index, input] of list.entries()) {
+            try {
+              await createTransaction(member, input && typeof input === 'object' ? input : {});
+              created++;
+            } catch (err) {
+              failed.push({ index, error: err instanceof HttpError ? err.message : 'Notion rejected this row' });
+              if (!(err instanceof HttpError)) console.error('[finance import]', err);
+            }
+          }
+          sendJson(res, 200, { created, failed, finance: await finance() });
+          return;
+        }
         const result = await createTransaction(member, jsonBody(req));
         sendJson(res, 201, { ...result, finance: await finance() });
         return;

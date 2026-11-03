@@ -7,6 +7,7 @@ import { useFinance } from '@/hooks/useFinance';
 import { useEvents } from '@/hooks/useEvents';
 import { formatRM } from '@/lib/money';
 import { AddTransactionForm, FinanceSummary, TransactionList } from '@/components/finance/FinanceParts';
+import { ImportLedger } from '@/components/finance/ImportLedger';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Finance page: society-wide totals, outstanding reimbursements, per-event
@@ -119,8 +120,9 @@ export function FinanceView() {
           </section>
 
           <section className="space-y-4">
-            <div className="flex items-baseline justify-between border-b border-border pb-2">
+            <div className="flex items-center justify-between gap-3 border-b border-border pb-2">
               <h2 className="font-serif text-lg font-semibold">All transactions</h2>
+              <ImportLedger />
             </div>
             <AddTransactionForm />
             {transactions.length > 0 && (
