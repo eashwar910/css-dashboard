@@ -16,17 +16,10 @@ export const ORDER: readonly (readonly string[])[] = [
   ['fathima sakinah', 'sakinah'],
   ['eashwar siddha satish nath', 'eashwar siddha satish', 'eashwar siddha', 'eashwar'],
   ['wong zi xin', 'chloe'],
-  ['muhammad sajid desai', 'muhammad sajid', 'sajid desai', 'sajid'],
+  ['muhammad sajid desai', 'muhammad sajid', 'sajid desai', 'muhammad desai', 'sajid'],
   ['muhammad raza', 'raza'],
   ['quek jia wei', 'jia wei'],
   ['jia wen', 'wen'],
-];
-
-export const JUNIOR_COMMITTEE: readonly (readonly string[])[] = [
-  ['aung kaung myat', 'aung kaung'],
-  ['thu eain san', 'thu eain', 'eain san'],
-  ['mohamed radzi bin mohamed saleh', 'mohamed radzi', 'radzi'],
-  ['zachary sim kah yao', 'zachary sim', 'zachary'],
 ];
 
 function words(name: string): string {
@@ -44,11 +37,6 @@ export function memberRank(name: string): number {
   return index === -1 ? ORDER.length : index;
 }
 
-/** Whether the name matches someone in JUNIOR_COMMITTEE (whole words, like memberRank). */
-export function isJuniorCommittee(name: string): boolean {
-  return indexIn(name, JUNIOR_COMMITTEE) !== -1;
-}
-
 /** Whether one name contains the other as whole words ("John Tiong" ~ "John Tiong Sie Ho"). */
 export function sameName(a: string, b: string): boolean {
   const [x, y] = [words(a), words(b)];
@@ -63,7 +51,7 @@ export function compareMembers(a: string, b: string): number {
 /** Weekly-tab sections. Aliases match like ORDER; anyone unlisted is shown above the sections. */
 export const DEPARTMENTS: readonly (readonly [string, readonly string[]])[] = [
   ['Marketing', ['sakinah', 'faysal', 'chloe', 'wong zi xin', 'zachary']],
-  ['Events', ['raza', 'thu eain', 'eain san', 'jia wen', 'wen']],
+  ['Events', ['raza', 'thu eain', 'eain san', 'jia wen', 'wen', 'muhammad desai', 'sajid desai', 'sajid']],
   ['Tech', ['eashwar', 'aung kaung', 'karon']],
   ['Finance', ['john tiong', 'john']],
 ];

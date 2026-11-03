@@ -11,7 +11,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTasks, type PersonGroup } from '@/hooks/useTasks';
 import { useTaskRequests } from '@/hooks/useTaskRequests';
 import { useApiResource } from '@/hooks/useApiResource';
-import { compareMembers, DEPARTMENTS, departmentOf, isJuniorCommittee, sameName } from '@/lib/memberOrder';
+import { compareMembers, DEPARTMENTS, departmentOf, sameName } from '@/lib/memberOrder';
 import type { CommitteeRosterMember, Task } from '@/lib/types';
 import { TaskEditDialog } from '@/components/TaskEditDialog';
 import { parseDate } from '@/lib/eventDates';
@@ -316,7 +316,6 @@ export function WeeklyView() {
   const { toast } = useToast();
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [activeCommittee, setActiveCommittee] = useState<'Executive Committee' | 'Junior Committee'>('Executive Committee');
 
   // Include every active directory member, even when they have no current tasks.
   const extraPeople: Person[] = [
@@ -339,9 +338,7 @@ export function WeeklyView() {
   const emailFor = (key: string) =>
     roster.find((rosterMember) => rosterMember.notionUserId === key || `member:${rosterMember.email ?? normalizeName(rosterMember.name)}` === key)?.email
     ?? members.find((m) => m.notionUserId === key)?.email;
-  const allRows = personRows(thisWeekGroups, overdueGroups, extraPeople);
-  // Anyone not named in JUNIOR_COMMITTEE stays on the ExCo tab, so nobody new disappears.
-  const rows = allRows.filter((row) => isJuniorCommittee(row.name) === (activeCommittee === 'Junior Committee'));
+  const rows = personRows(thisWeekGroups, overdueGroups, extraPeople);
 
   const handleToggleTask = (id: string) => {
     toggleTask(id).catch((err: unknown) =>
@@ -388,25 +385,6 @@ export function WeeklyView() {
                 {isLoading ? 'Loading...' : `${doneCount(overdue)} of ${overdue.length} done`}
               </span>
             </div>
-          </div>
-
-          <div className="mb-5 inline-flex rounded-md border border-border bg-muted/30 p-1" role="group" aria-label="Committee">
-            {(['Executive Committee', 'Junior Committee'] as const).map((committee) => (
-              <button
-                key={committee}
-                type="button"
-                aria-pressed={activeCommittee === committee}
-                onClick={() => setActiveCommittee(committee)}
-                className={cn(
-                  'rounded px-3 py-1.5 text-sm font-medium transition-colors',
-                  activeCommittee === committee
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                )}
-              >
-                {committee}
-              </button>
-            ))}
           </div>
 
           {isLoading || isRosterLoading ? (
