@@ -60,3 +60,10 @@ export const DEPARTMENTS: readonly (readonly [string, readonly string[]])[] = [
 export function departmentOf(name: string): string | undefined {
   return DEPARTMENTS.find(([, aliases]) => indexIn(name, [aliases]) !== -1)?.[0];
 }
+
+/** Only these people see the Finance tab (Jack, Selina, John). */
+const FINANCE_VIEWERS = ['Lee Yoonjae', 'Selina Yeoh Yun Ci', 'John Tiong'];
+
+export function canSeeFinance(name: string | null | undefined): boolean {
+  return !!name && FINANCE_VIEWERS.some((viewer) => sameName(name, viewer));
+}

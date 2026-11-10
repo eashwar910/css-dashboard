@@ -17,6 +17,7 @@ import { TaskRequestNotifications } from '@/components/TaskRequestNotifications'
 import { AuthProvider } from '@/components/AuthProvider';
 import { LoginView } from '@/components/views/LoginView';
 import { useAuth } from '@/hooks/useAuth';
+import { canSeeFinance } from '@/lib/memberOrder';
 
 const LOGIN_PATH = '/login';
 
@@ -41,6 +42,7 @@ function ThemeToggle() {
 function Dashboard() {
   const [view, setView] = useState<View>('home');
   const [searchQuery, setSearchQuery] = useState('');
+  const { member } = useAuth();
 
   // Search results live on Home, so typing from another tab goes there
   const handleSearchChange = (query: string) => {
@@ -58,7 +60,7 @@ function Dashboard() {
           {view === 'events' && <EventsView />}
           {view === 'meetings' && <MeetingsView />}
           {view === 'team' && <TeamView />}
-          {view === 'finance' && <FinanceView />}
+          {view === 'finance' && canSeeFinance(member?.full_name) && <FinanceView />}
           {view === 'external' && <ExternalRelationsView />}
           {view === 'nottshack' && (
             <FlagshipView key="nottshack" project="NottsHack" match={/notts\s*hack/i} blurb="Everything for NottsHack in one place: status, stage, sponsors, overview, to-dos and finance." />

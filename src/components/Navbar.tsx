@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
+import { canSeeFinance } from '@/lib/memberOrder';
 import { useTheme } from '@/components/ThemeProvider';
 
 export type View = 'home' | 'weekly' | 'events' | 'meetings' | 'team' | 'finance' | 'external' | 'logistics' | 'nottshack';
@@ -91,6 +92,7 @@ export function Navbar({ currentView, onNavigate, searchQuery, onSearchChange }:
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, member, signOut } = useAuth();
   const displayName = member?.full_name ?? user?.email;
+  const items = navItems.filter((item) => item.id !== 'finance' || canSeeFinance(member?.full_name));
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background">
@@ -104,7 +106,7 @@ export function Navbar({ currentView, onNavigate, searchQuery, onSearchChange }:
         {/* Desktop navigation — plain text links, active one underlined */}
         <nav className="hidden h-full flex-1 items-center gap-6 xl:flex">
           <ul className="flex h-full items-stretch gap-4 2xl:gap-6">
-            {navItems.map((item) => {
+            {items.map((item) => {
               const Icon = item.icon;
               const active = currentView === item.id;
               return (
@@ -163,7 +165,7 @@ export function Navbar({ currentView, onNavigate, searchQuery, onSearchChange }:
               <SheetTitle className="sr-only">Navigation menu</SheetTitle>
               <nav className="px-5 pb-2 pt-12">
                 <ul>
-                  {navItems.map((item) => {
+                  {items.map((item) => {
                     const Icon = item.icon;
                     const active = currentView === item.id;
                     return (
